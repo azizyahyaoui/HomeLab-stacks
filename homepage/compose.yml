@@ -1,0 +1,38 @@
+services:
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    ports:
+      - "${HOMEPAGE_PORT}:3000"
+
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      HOMEPAGE_ALLOWED_HOSTS: ${HOMEPAGE_ALLOWED_HOSTS}
+
+      NODE_TLS_REJECT_UNAUTHORIZED: 0
+
+      #--- Proxmox Variables ---
+      HOMEPAGE_VAR_PROXMOX_HOST: ${HOMEPAGE_VAR_PROXMOX_HOST}
+      HOMEPAGE_VAR_PROXMOX_USERNAME: ${HOMEPAGE_VAR_PROXMOX_USERNAME}
+      HOMEPAGE_VAR_PROXMOX_PASSWORD: ${HOMEPAGE_VAR_PROXMOX_PASSWORD}
+      #--- Portainer Variables ---
+      HOMEPAGE_VAR_PORTAINER_URL: ${HOMEPAGE_VAR_PORTAINER_URL}
+      HOMEPAGE_VAR_PORTAINER_KEY: ${HOMEPAGE_VAR_PORTAINER_KEY}
+      HOMEPAGE_VAR_PORTAINER_ENV_NUMBER: ${HOMEPAGE_VAR_PORTAINER_ENV_NUMBER}
+
+    
+
+
+    volumes:
+      - ./config:/app/config
+      - ./assets/images/background:/app/public/images
+      - ./data:/app/data
+      #- /var/run/docker.sock:/var/run/docker.sock:ro
