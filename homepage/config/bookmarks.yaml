@@ -1,0 +1,31 @@
+---
+# For configuration options and examples, please see:
+# https://gethomepage.dev/configs/bookmarks
+
+- Work:
+    - Github:
+        - abbr: GH
+          href: https://github.com/
+          icon: github
+    - Notion:
+        - abbr: NT
+          href: https://notion.so/
+          icon: notion
+
+
+- Sites:
+    - downdetector:
+        - abbr: DD
+          href: https://downdetector.com/
+          icon: https://downdetector.com/favicon.ico
+    
+    - Warframe Market:
+        - abbr: WFM
+          href: https://warframe.market/
+          icon: https://warframe.market/favicon.ico
+
+- Entertainment:
+    - YouTube:
+        - abbr: YT
+          href: https://youtube.com/
+          icon: youtube
