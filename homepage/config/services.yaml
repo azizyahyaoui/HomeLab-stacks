@@ -27,22 +27,39 @@
             key: "{{HOMEPAGE_VAR_PORTAINER_KEY}}"
             env: {{HOMEPAGE_VAR_PORTAINER_ENV_NUMBER}}
 
-    - Portainer agent 2:
-        href: https://192.168.1.95:9443/#!/5/docker/dashboard
-        description: BTWazuh Portainer agent
-        icon: portainer
-        widget:
-            type: portainer
-            url: "{{HOMEPAGE_VAR_PORTAINER_URL}}"
-            key: "{{HOMEPAGE_VAR_PORTAINER_KEY}}"
-            env: 5
 
 - Monitoring:
     - Wazuh:
-        href: https://192.168.1.90/app/wz-home            # URL you click to open the web interface
+        href: {{HOMEPAGE_VAR_WAZUH_URL}}            # URL you click to open the web interface
         description: SIEM & Threat Hunting
         icon: wazuh
-        siteMonitor: https://192.168.1.90/app/wz-home
+        siteMonitor: {{HOMEPAGE_VAR_WAZUH_URL}}
+
+- Observability:
+    - Kibana:
+        icon: si-kibana
+        href: {{HOMEPAGE_VAR_KIBANA_URL}}
+        description: ELK dashboards & visualization
+        server: {{HOMEPAGE_VAR_KIBANA_URL}}
+        container: kibana
+        showStats: true
+    - Elasticsearch:
+        icon: si-elasticsearch
+        href: {{HOMEPAGE_VAR_ELASTICSEARCH_URL}}
+        description: Search & analytics engine
+        server: {{HOMEPAGE_VAR_ELASTICSEARCH_URL}}
+        container: elasticsearch
+        showStats: true
+
+    - Logstash:
+        icon: si-logstash
+        href: {{HOMEPAGE_VAR_LOGSTASH_URL}}
+        description: Log ingestion & processing
+        server: {{HOMEPAGE_VAR_LOGSTASH_URL}}
+        container: logstash
+        showStats: true
+
+
 
 - localhost:
     - localhost:
