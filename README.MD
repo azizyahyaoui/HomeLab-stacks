@@ -29,7 +29,6 @@ kept independent so services can be deployed, updated, and backed up separately.
 
 - [Homepage](homepage/) — dashboard for homelab services and integrations.
 - [ELK stack](monitoring/elk-stack/) — Elasticsearch, Logstash, and Kibana for log collection and analysis.
-- [Belk](monitoring/Belk/) — monitoring stack workspace.
 - [Prometheus](monitoring/promethus/) — metrics monitoring workspace.
 - [Nessus](security/nessus/) — vulnerability scanning workspace.
 - [OpenVAS](security/openvas/) — vulnerability scanning workspace.
