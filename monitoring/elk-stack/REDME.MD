@@ -227,6 +227,13 @@ docker compose logs -f
 # Check Elasticsearch health
 curl http://localhost:9200
 ```
+## Adding log agants
+
+### Winlog
+        TODO
+
+
+
 
 ## Troubleshooting
 

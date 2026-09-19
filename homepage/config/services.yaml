@@ -35,29 +35,32 @@
         icon: wazuh
         siteMonitor: {{HOMEPAGE_VAR_WAZUH_URL}}
 
-- Observability:
+    - Prometheus:
+        icon: prometheus.png
+        href: http://<your-prometheus-ip>:9090 #later
+        widget:
+          type: prometheusmetric
+          #url: http://<your-prometheus-ip>:9090
+          refreshInterval: 10000
+          metrics:
+            - label: CPU Usage
+              query: round(avg(instance:node_cpu_utilisation:rate5m) * 100, 0.1)
+              suffix: '%'
+
+- Logging:
     - Kibana:
         icon: si-kibana
         href: {{HOMEPAGE_VAR_KIBANA_URL}}
         description: ELK dashboards & visualization
-        server: {{HOMEPAGE_VAR_KIBANA_URL}}
+        siteMonitor: {{HOMEPAGE_VAR_KIBANA_URL}}
         container: kibana
-        showStats: true
+    
     - Elasticsearch:
         icon: si-elasticsearch
         href: {{HOMEPAGE_VAR_ELASTICSEARCH_URL}}
         description: Search & analytics engine
-        server: {{HOMEPAGE_VAR_ELASTICSEARCH_URL}}
+        siteMonitor: {{HOMEPAGE_VAR_ELASTICSEARCH_URL}}
         container: elasticsearch
-        showStats: true
-
-    - Logstash:
-        icon: si-logstash
-        href: {{HOMEPAGE_VAR_LOGSTASH_URL}}
-        description: Log ingestion & processing
-        server: {{HOMEPAGE_VAR_LOGSTASH_URL}}
-        container: logstash
-        showStats: true
 
 
 
