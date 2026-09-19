@@ -69,6 +69,10 @@ added in the future.
 - Do not commit passwords, API keys, certificates, private keys, or generated data.
 - Back up persistent volumes and document restore steps in the relevant service README.
 
+## License
+
+This repository is released under the [MIT License](LICENSE).
+
 ## Contributing
 
 When adding a service:
