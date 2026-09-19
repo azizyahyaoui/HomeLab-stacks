@@ -1,5 +1,15 @@
 # Homelab Stack
 
+   Creator: Yahyaoui Med Aziz | 260727
+   Editor: Antigravity  
+
+[![HOMELAB](https://img.shields.io/badge/HOMELAB-STACK-0b84c6?style=flat-square)](.)
+[![DOCKER](https://img.shields.io/badge/DOCKER-CONTAINERS-2496ed?style=flat-square&logo=docker&logoColor=white)](.)
+[![MONITORING](https://img.shields.io/badge/MONITORING-OBSERVABILITY-6f42c1?style=flat-square)](monitoring/)
+[![SECURITY OPERATIONS](https://img.shields.io/badge/SECURITY%20OPERATIONS-ACTIVE-d64545?style=flat-square)](security/)
+[![VULNERABILITY SCANNING](https://img.shields.io/badge/VULNERABILITY%20SCANNING-IN%20PROGRESS-f08c46?style=flat-square)](security/)
+[![MITRE ATT&CK](https://img.shields.io/badge/MITRE%20ATT%26CK-MAPPED-4caf00?style=flat-square)](security/)
+
 Infrastructure and services for a self-hosted homelab. Each top-level directory is
 kept independent so services can be deployed, updated, and backed up separately.
 
