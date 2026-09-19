@@ -70,8 +70,8 @@ When adding a service:
 4. Record the service and its deployment instructions in this README.
 
 ## Roadmap
-
-- Define shared network and storage conventions.
-- Add reverse-proxy and TLS documentation.
-- Document backup and restore procedures.
-- Add health checks and monitoring targets for deployed services.
+- TODO:
+  - Define shared network and storage conventions.
+  - Add reverse-proxy and TLS documentation.
+  - Document backup and restore procedures.
+  - Add health checks and monitoring targets for deployed services.
