@@ -18,14 +18,14 @@ The version is defined once in `.env` and shared by all Elastic containers:
 
 ## Project Structure
 
-```text
-monitoring/elk-stack/
-├── docker-compose.yml
-├── .env.sample
-├── REDME.MD
-└── logstash/
-    └── pipeline/
-        └── logstash.conf
+```mermaid
+flowchart TD
+        Root[monitoring/elk-stack]
+        Root --> Compose[docker-compose.yml]
+        Root --> Env[.env.sample]
+        Root --> Readme[REDME.MD]
+        Root --> Logstash[logstash/]
+        Logstash --> Pipeline[pipeline/logstash.conf]
 ```
 
 ### `docker-compose.yml`
@@ -72,21 +72,14 @@ The Compose file publishes port `5000` for TCP and UDP, but the current pipeline
 
 ## Architecture
 
-```text
-Applications / Filebeat agents
-            │
-            ▼
-       Logstash:5044
-            │  authenticated HTTPS
-            ▼
-    Elasticsearch:9200
-            │
-            ▼
-       Kibana:5601
+```mermaid
+flowchart TD
+    Agents[Applications and Filebeat agents] -->|Beats on 5044| Logstash[Logstash]
+    Logstash -->|Authenticated HTTPS| Elasticsearch[Elasticsearch on 9200]
+    Elasticsearch --> Kibana[Kibana on 5601]
 ```
 
 ## Quick Start
-
 From this directory:
 
 ```bash
@@ -117,7 +110,7 @@ docker compose exec elasticsearch ls /usr/share/elasticsearch/config/certs/ca/ca
 ```
 
 ## Useful Commands
-
+## Useful Commands
 ```bash
 # View service status
 docker compose ps
@@ -140,7 +133,6 @@ Removing volumes deletes Elasticsearch data and generated certificates. The next
 ---
 
 ## Troubleshooting
-
 1. Check the service state with `docker compose ps`.
 2. Inspect startup failures with `docker compose logs setup elasticsearch bootstrap`.
 3. Confirm that the required values in `.env` are not still placeholders.
@@ -150,10 +142,205 @@ Removing volumes deletes Elasticsearch data and generated certificates. The next
 7. If credentials or security settings changed, recreate the stack with `docker compose down -v` and start it again.
 ---
 
-## Adding log agants
+## Adding Log Agents
 
-### filebeat (linux)
-        TODO
+### Filebeat on Debian Linux
+
+The following procedure installs Filebeat on CT 102 and sends nginx and application logs to Logstash. Filebeat should use the same major version as Elasticsearch and Logstash. Matching the minor and patch version is recommended when practical.
+
+#### Option A: Install from the Elastic repository
+
+Check the Elasticsearch version from Docker-HCT before installing Filebeat:
+
+```bash
+docker exec elasticsearch curl -s --cacert /usr/share/elasticsearch/config/certs/ca/ca.crt \
+        -u "elastic:$ELASTIC_PASSWORD" \
+        https://localhost:9200
+```
+
+Inspect the `version.number` value in the JSON response. If it contains `9.x.x`, install the corresponding Filebeat 9.x package. Use the same major version as the rest of the stack and avoid installing a newer major version by accident.
+
+Add the official Elastic repository and signing key for that major version, then install Filebeat through Debian's package manager. Follow Elastic's package-installation instructions for the selected version.
+
+#### Option B: Install a specific `.deb` package
+
+To install Filebeat `9.5.4` specifically:
+
+```bash
+cd /tmp
+curl -fL -O https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-9.5.4-amd64.deb
+sudo dpkg -i filebeat-9.5.4-amd64.deb
+```
+
+If `dpkg` reports missing dependencies, repair them with:
+
+```bash
+sudo apt-get install -f
+```
+
+Do not start Filebeat until the configuration in the next steps is complete.
+
+### Configure Filebeat
+
+Edit `/etc/filebeat/filebeat.yml` and validate the configuration:
+
+```bash
+sudo nano /etc/filebeat/filebeat.yml
+sudo filebeat test config
+```
+
+Disable direct Elasticsearch output and send events to Logstash instead:
+
+```yaml
+output.logstash:
+        hosts: ["192.168.1.95:5044"]
+```
+
+Make sure direct Elasticsearch output is disabled or commented:
+
+```yaml
+#output.elasticsearch:
+#  hosts: ["localhost:9200"]
+```
+
+The address above assumes `192.168.1.95` is the Docker-HCT host running Logstash. Replace it with the reachable address of that host when necessary. Filebeat sends events to Logstash over the Beats protocol, and Logstash processes and indexes them in Elasticsearch.
+
+### Enable the nginx Module
+
+On CT 102:
+
+```bash
+sudo filebeat modules enable nginx
+sudo filebeat modules list
+sudo nano /etc/filebeat/modules.d/nginx.yml
+```
+
+Configure the module to collect nginx access and error logs:
+
+```yaml
+- module: nginx
+        access:
+                enabled: true
+                var.paths:
+                        - "/var/log/nginx/access.log*"
+
+        error:
+                enabled: true
+                var.paths:
+                        - "/var/log/nginx/error.log*"
+```
+
+The nginx module parses access and error logs into structured fields instead of sending only raw log lines.
+
+### Add Custom Application Logs
+
+The nginx module handles `/var/log/nginx/`. Add a regular Filebeat `filestream` input for `/var/log/lab-dumLogs/application.log` in `/etc/filebeat/filebeat.yml`:
+
+```yaml
+filebeat.inputs:
+
+- type: filestream
+        id: lab-application
+        enabled: true
+        paths:
+                - /var/log/lab-dumLogs/application.log
+```
+
+The collection flow is:
+
+```mermaid
+flowchart TD
+        Filebeat[Filebeat on CT 102]
+        Nginx[nginx module<br/>access and error logs]
+        App[filestream<br/>application.log]
+        Logstash[Logstash on Docker-HCT]
+
+        Filebeat --> Nginx
+        Filebeat --> App
+        Nginx --> Logstash
+        App --> Logstash
+```
+
+### Check Filebeat Configuration
+
+Run both checks before starting the service:
+
+```bash
+sudo filebeat test config
+sudo filebeat test output
+```
+
+The configuration check should return `Config OK`. The output check should test the Logstash connection at `:5044`, including DNS resolution and the TCP connection. This pipeline does not configure TLS on the Beats input, so a warning such as `TLS... WARN secure connection disabled` is expected for the current lab configuration.
+
+### Start Filebeat
+
+```bash
+sudo systemctl enable --now filebeat
+sudo systemctl status filebeat
+sudo journalctl -u filebeat -f
+```
+
+The service should report `Active: active (running)`.
+
+### Generate Traffic
+
+Open another CT terminal and generate nginx requests:
+
+```bash
+for i in {1..20}; do
+        curl -s http://localhost/ > /dev/null
+done
+
+for i in {1..10}; do
+        curl -s http://localhost/fake-$i > /dev/null
+done
+```
+
+The application log generator should also produce events such as `INFO`, `WARNING`, and `ERROR`.
+
+### Watch Logstash
+
+On Docker-HCT:
+
+```bash
+docker logs -f logstash
+```
+
+You should see events containing fields such as `message`, `host`, and `@timestamp`. This is the first major checkpoint: events have crossed the network boundary from CT 102 to Logstash.
+
+### Check Elasticsearch
+
+Because this deployment enables HTTPS, query Elasticsearch with the CA certificate and `elastic` credentials:
+
+```bash
+docker compose exec elasticsearch bash -c \
+'curl -s --cacert /usr/share/elasticsearch/config/certs/ca/ca.crt \
+        -u "elastic:$ELASTIC_PASSWORD" \
+        "https://localhost:9200/_cat/indices?v"'
+```
+
+You should eventually see a daily index similar to `filebeat-2026.09.19`. That confirms the pipeline:
+
+```mermaid
+flowchart LR
+        CT[CT 102] --> Filebeat[Filebeat]
+        Filebeat --> Logstash[Logstash]
+        Logstash --> Elasticsearch[Elasticsearch]
+        Elasticsearch --> Kibana[Kibana]
+```
+
+### Open Kibana
+
+Open Kibana at [http://localhost:5601](http://localhost:5601), then go to **Stack Management > Data Views** and create:
+
+```text
+filebeat-*
+```
+
+Select `@timestamp` as the timestamp field. Open **Discover**, choose the `filebeat-*` data view, and verify that nginx requests and application events are visible.
+
+---
+
 ### Winlogbeat (Windows)
         TODO
 
