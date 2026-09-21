@@ -1,33 +1,86 @@
 services:
+
+  # =========================================================
+  # Setup
+  # Generate Elasticsearch TLS certificates
+  # =========================================================
   setup:
     image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
     container_name: setup
+
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
+
     user: "0"
+
     command: >
       bash -c '
+        set -e
+
         if [ x${ELASTIC_PASSWORD} == x ]; then
-          echo "Set the ELASTIC_PASSWORD environment variable in the .env file";
+          echo "Set ELASTIC_PASSWORD in .env";
           exit 1;
         fi;
+
+        if [ x${KIBANA_PASSWORD} == x ]; then
+          echo "Set KIBANA_PASSWORD in .env";
+          exit 1;
+        fi;
+
+        if [ x${LOGSTASH_WRITER_PASSWORD} == x ]; then
+          echo "Set LOGSTASH_WRITER_PASSWORD in .env";
+          exit 1;
+        fi;
+
         if [ ! -f config/certs/ca.zip ]; then
           echo "Creating CA";
-          bin/elasticsearch-certutil ca --silent --pem -out config/certs/ca.zip;
+
+          bin/elasticsearch-certutil ca \
+            --silent \
+            --pem \
+            -out config/certs/ca.zip;
+
           unzip config/certs/ca.zip -d config/certs;
         fi;
+
         if [ ! -f config/certs/certs.zip ]; then
-          echo "Creating certs";
-          echo -e "instances:\n  - name: elasticsearch\n    dns:\n      - elasticsearch\n      - localhost\n    ip:\n      - 127.0.0.1" > config/certs/instances.yml;
-          bin/elasticsearch-certutil cert --silent --pem -out config/certs/certs.zip --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key;
+          echo "Creating Elasticsearch certificate";
+
+          echo -e "
+        instances:
+          - name: elasticsearch
+            dns:
+              - elasticsearch
+              - localhost
+            ip:
+              - 127.0.0.1
+        " > config/certs/instances.yml;
+
+          bin/elasticsearch-certutil cert \
+            --silent \
+            --pem \
+            -out config/certs/certs.zip \
+            --in config/certs/instances.yml \
+            --ca-cert config/certs/ca/ca.crt \
+            --ca-key config/certs/ca/ca.key;
+
           unzip config/certs/certs.zip -d config/certs;
         fi;
-        echo "Setting file permissions"
-        chown -R 1000:0 config/certs
+
+        echo "Setting certificate permissions";
+
+        chown -R 1000:0 config/certs;
+
+        echo "Setup complete";
       '
+
     networks:
       - elk
 
+
+  # =========================================================
+  # Elasticsearch
+  # =========================================================
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
     container_name: elasticsearch
@@ -36,12 +89,20 @@ services:
     environment:
       - node.name=elasticsearch
       - discovery.type=single-node
+
+      # Security
       - xpack.security.enabled=true
+
+      # HTTPS
       - xpack.security.http.ssl.enabled=true
       - xpack.security.http.ssl.key=certs/elasticsearch/elasticsearch.key
       - xpack.security.http.ssl.certificate=certs/elasticsearch/elasticsearch.crt
       - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+
+      # Built-in elastic password
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+
+      # JVM
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
 
     ports:
@@ -55,9 +116,133 @@ services:
       setup:
         condition: service_completed_successfully
 
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s --fail --cacert config/certs/ca/ca.crt -u elastic:${ELASTIC_PASSWORD} https://localhost:9200 >/dev/null"
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+
     networks:
       - elk
 
+
+  # =========================================================
+  # Bootstrap Elasticsearch security
+  #
+  # Creates:
+  #   - logstash_writer role
+  #   - logstash_writer user
+  #   - kibana_system password
+  # =========================================================
+  bootstrap:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    container_name: bootstrap
+
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs:ro
+
+    user: "1000"
+
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+    command: >
+      bash -c '
+        set -e
+
+        echo "Elasticsearch is ready";
+        echo "Configuring security...";
+
+        # ---------------------------------------------------
+        # Set kibana_system password
+        # ---------------------------------------------------
+        echo "Setting kibana_system password";
+
+        curl -s \
+          --fail \
+          --cacert config/certs/ca/ca.crt \
+          -u "elastic:${ELASTIC_PASSWORD}" \
+          -X POST \
+          -H "Content-Type: application/json" \
+          "https://elasticsearch:9200/_security/user/kibana_system/_password" \
+          -d "{\"password\":\"${KIBANA_PASSWORD}\"}";
+
+        echo;
+        echo "kibana_system password configured";
+
+
+        # ---------------------------------------------------
+        # Create / update Logstash role
+        # ---------------------------------------------------
+        echo "Creating logstash_writer role";
+
+        curl -s \
+          --fail \
+          --cacert config/certs/ca/ca.crt \
+          -u "elastic:${ELASTIC_PASSWORD}" \
+          -X PUT \
+          -H "Content-Type: application/json" \
+          "https://elasticsearch:9200/_security/role/logstash_writer" \
+          -d '\''{
+            "cluster": [
+              "manage_index_templates",
+              "monitor",
+              "manage_ilm"
+            ],
+            "indices": [
+              {
+                "names": [
+                  "filebeat-*"
+                ],
+                "privileges": [
+                  "write",
+                  "create",
+                  "create_index",
+                  "manage",
+                  "manage_ilm"
+                ]
+              }
+            ]
+          }'\'';
+
+        echo;
+        echo "logstash_writer role configured";
+
+
+        # ---------------------------------------------------
+        # Create / update Logstash user
+        # ---------------------------------------------------
+        echo "Creating logstash_writer user";
+
+        curl -s \
+          --fail \
+          --cacert config/certs/ca/ca.crt \
+          -u "elastic:${ELASTIC_PASSWORD}" \
+          -X PUT \
+          -H "Content-Type: application/json" \
+          "https://elasticsearch:9200/_security/user/logstash_writer" \
+          -d "{\"password\":\"${LOGSTASH_WRITER_PASSWORD}\",\"roles\":[\"logstash_writer\"],\"full_name\":\"Logstash writer user\"}";
+
+        echo;
+        echo "logstash_writer user configured";
+
+        echo "========================================";
+        echo "Elasticsearch bootstrap complete";
+        echo "========================================";
+      '
+
+    networks:
+      - elk
+
+
+  # =========================================================
+  # Kibana
+  # =========================================================
   kibana:
     image: docker.elastic.co/kibana/kibana:${STACK_VERSION}
     container_name: kibana
@@ -67,8 +252,11 @@ services:
       - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
       - ELASTICSEARCH_USERNAME=kibana_system
       - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
+
+      # CA
       - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=/usr/share/kibana/config/certs/ca/ca.crt
-      # Persistent Kibana encryption keys
+
+      # Persistent encryption keys
       - XPACK_SECURITY_ENCRYPTIONKEY=${KIBANA_SECURITY_ENCRYPTION_KEY}
       - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${KIBANA_SAVED_OBJECTS_ENCRYPTION_KEY}
       - XPACK_REPORTING_ENCRYPTIONKEY=${KIBANA_REPORTING_ENCRYPTION_KEY}
@@ -80,11 +268,16 @@ services:
       - certs:/usr/share/kibana/config/certs:ro
 
     depends_on:
-      - elasticsearch
+      bootstrap:
+        condition: service_completed_successfully
 
     networks:
       - elk
 
+
+  # =========================================================
+  # Logstash
+  # =========================================================
   logstash:
     image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
     container_name: logstash
@@ -103,7 +296,8 @@ services:
       - "5000:5000/udp"
 
     depends_on:
-      - elasticsearch
+      bootstrap:
+        condition: service_completed_successfully
 
     networks:
       - elk

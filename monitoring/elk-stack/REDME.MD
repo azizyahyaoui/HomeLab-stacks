@@ -1,258 +1,170 @@
-# ELK Stack Lab Environment
+# ELK Stack
 
-This project is a local Docker Compose-based ELK stack designed for log collection, indexing, and visualization in a lab or homelab environment.
+The ELK stack is the logging part of the wider [HomeLab project](../../README.MD). It provides a central place to collect logs, store and search them, and explore them through Kibana. The stack is intended for local monitoring, development, and homelab workloads.
 
-## Overview
+ELK stands for:
 
-The stack currently includes:
+- **Elasticsearch**: stores, indexes, and searches log events.
+- **Logstash**: receives Beats events, processes them, and sends them to Elasticsearch.
+- **Kibana**: provides the web interface for searching logs and creating visualizations and dashboards.
 
-- Elasticsearch for indexing and searching log data
-- Logstash for receiving and forwarding log events
-- Kibana for exploring data and building dashboards
+## Current Versions
 
-The configuration is defined in `docker-compose.yml`, and the Logstash pipeline is configured in `logstash/pipeline/logstash.conf`.
-
-## Current Stack Versions
-
-The compose file is using the following Elastic versions:
+The version is defined once in `.env` and shared by all Elastic containers:
 
 - Elasticsearch: `9.5.4`
 - Logstash: `9.5.4`
 - Kibana: `9.5.4`
 
-## Architecture
-
-```text
-Applications / agents
-        │
-        ▼
-   Logstash:5044 / 5000
-        │
-        ▼
- Elasticsearch:9200
-        │
-        ▼
-   Kibana:5601
-```
-
-### Traffic flow
-
-- Logstash listens on `5044` for Beats-style traffic
-- Logstash also listens on `5000/tcp` and `5000/udp` for raw JSON input
-- Elasticsearch stores all incoming documents
-- Kibana connects to Elasticsearch and exposes the UI for search and dashboards
-
-## Services
-
-### Elasticsearch
-- Container name: `elasticsearch`
-- Image: `docker.elastic.co/elasticsearch/elasticsearch:9.5.4`
-- Port: `9200`
-- Persistent storage: Docker volume `esdata`
-- Network: `elk`
-
-### Logstash
-- Container name: `logstash`
-- Image: `docker.elastic.co/logstash/logstash:9.5.4`
-- Exposed ports:
-  - `5044` for Beats input
-  - `5000/tcp` for JSON-over-TCP input
-  - `5000/udp` for JSON-over-UDP input
-- Pipeline directory: `./logstash/pipeline`
-- Network: `elk`
-
-### Kibana
-- Container name: `kibana`
-- Image: `docker.elastic.co/kibana/kibana:9.5.4`
-- Port: `5601`
-- Connects to Elasticsearch at `http://elasticsearch:9200`
-- Network: `elk`
-
 ## Project Structure
 
 ```text
-monitoring/Belk/
+monitoring/elk-stack/
 ├── docker-compose.yml
+├── .env.sample
 ├── REDME.MD
-├── logstash/
-│   └── pipeline/
-│       └── logstash.conf
-└── Docker-managed volumes
+└── logstash/
+    └── pipeline/
+        └── logstash.conf
+```
+
+### `docker-compose.yml`
+
+The Docker Compose file defines the complete ELK deployment and its startup dependencies:
+
+- **`setup`** creates a local certificate authority and an Elasticsearch certificate in the shared `certs` volume. It also verifies that the required passwords exist.
+- **`elasticsearch`** runs Elasticsearch as a single node with security and HTTPS enabled. Its data is persisted in the `esdata` Docker volume.
+- **`bootstrap`** waits for Elasticsearch to become healthy, sets the Kibana system password, and creates the restricted `logstash_writer` role and user.
+- **`kibana`** connects to Elasticsearch over HTTPS using the `kibana_system` account and the generated CA certificate. It publishes the web interface on port `5601`.
+- **`logstash`** mounts the pipeline configuration and CA certificate, accepts Beats traffic on port `5044`, and sends events to Elasticsearch over authenticated HTTPS.
+
+The `elk` bridge network allows the containers to communicate by service name. The `certs` volume is shared by the services that need TLS certificates, while `esdata` keeps Elasticsearch data across container restarts.
+
+### `.env.sample`
+
+`.env.sample` is a safe template for the local `.env` file used by Docker Compose. Copy it before starting the stack:
+
+```bash
+cp .env.sample .env
+```
+
+Replace every placeholder with a locally generated value. The file contains:
+
+- `STACK_VERSION`: the Elastic Stack version used by all services.
+- `ELASTIC_PASSWORD`: password for the built-in `elastic` administrator.
+- `KIBANA_PASSWORD`: password for Kibana's `kibana_system` account.
+- `LOGSTASH_WRITER_PASSWORD`: password for the restricted Logstash writer account.
+- `KIBANA_SECURITY_ENCRYPTION_KEY`, `KIBANA_SAVED_OBJECTS_ENCRYPTION_KEY`, and `KIBANA_REPORTING_ENCRYPTION_KEY`: persistent Kibana encryption keys.
+
+Generate passwords with `openssl rand -hex 24` and encryption keys with `openssl rand -hex 32`. Do not commit `.env` or real credentials. Commit only the sanitized `.env.sample` template.
+
+### `logstash/pipeline/logstash.conf`
+
+The Logstash pipeline currently:
+
+1. Accepts Beats/Filebeat events on port `5044`.
+2. Sends them to `https://elasticsearch:9200` using the dedicated `logstash_writer` account.
+3. Writes daily indices using the `filebeat-%{+YYYY.MM.dd}` pattern.
+4. Verifies Elasticsearch with the CA certificate mounted from the `certs` volume.
+5. Prints processed events with the `rubydebug` codec, which is useful while testing the lab.
+
+The Compose file publishes port `5000` for TCP and UDP, but the current pipeline does not define inputs on that port. Only port `5044` is active until a TCP or UDP input is added to `logstash.conf`.
+
+## Architecture
+
+```text
+Applications / Filebeat agents
+            │
+            ▼
+       Logstash:5044
+            │  authenticated HTTPS
+            ▼
+    Elasticsearch:9200
+            │
+            ▼
+       Kibana:5601
 ```
 
 ## Quick Start
 
-From this directory, start the stack:
+From this directory:
+
+```bash
+cp .env.sample .env
+```
+
+Edit `.env`, replacing all `REPLACE_WITH_...` values, then start the stack:
 
 ```bash
 docker compose up -d
-```
-
-Check the status:
-
-```bash
 docker compose ps
 ```
 
-Watch logs:
+Compose starts the services in order: certificate setup, Elasticsearch health check, security bootstrap, then Kibana and Logstash.
+
+Access Kibana at [http://localhost:5601](http://localhost:5601). Elasticsearch uses HTTPS and requires authentication:
 
 ```bash
-docker compose logs -f
+curl --cacert /path/to/ca.crt \
+  -u "elastic:$ELASTIC_PASSWORD" \
+  https://localhost:9200
 ```
 
-Access the interfaces:
-
-- Elasticsearch: `http://localhost:9200`
-- Kibana: `http://localhost:5601`
-
-## Logstash Pipeline Behavior
-
-The current pipeline listens for:
-
-- Beats on port `5044`
-- JSON payloads over TCP on port `5000`
-
-It forwards each event to Elasticsearch with the index naming pattern:
-
-```text
-lab-logs-%{+YYYY.MM.dd}
-```
-
-This creates a daily index based on the event timestamp.
-
-The pipeline configuration is:
-
-```conf
-input {
-  beats {
-    port => 5044
-  }
-  tcp {
-    port => 5000
-    codec => json
-  }
-}
-
-output {
-  elasticsearch {
-    hosts => ["http://elasticsearch:9200"]
-    index => "lab-logs-%{+YYYY.MM.dd}"
-  }
-}
-```
-
-## Security Notes
-
-This project is currently set up as a single-node Elasticsearch instance using:
-
-```yaml
-environment:
-  - discovery.type=single-node
-```
-
-The security toggle is currently commented out:
-
-```yaml
-# - xpack.security.enabled=false
-```
-
-That means the default Elasticsearch 9 behavior is secure by default. If you want to use the lab-friendly insecure mode instead, uncomment the line and recreate the volume.
-
-## Setup Options
-
-### Option 1: Complete the secure setup
-
-Use the built-in Elastic enrollment flow if you want to continue with the secure default configuration.
-
-1. Generate the Kibana enrollment token:
+The CA certificate is generated inside the `certs` volume. To inspect it from the Elasticsearch container:
 
 ```bash
-docker exec -it elasticsearch /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana
-```
-
-2. Paste the token into the Kibana setup wizard.
-
-3. Retrieve the verification code:
-
-```bash
-docker exec -it kibana bin/kibana-verification-code
-```
-
-4. Reset the default `elastic` password:
-
-```bash
-docker exec -it elasticsearch /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic
-```
-
-### Option 2: Force insecure lab mode
-
-If you want the no-auth local lab setup, use the insecure mode and remove the persistent data:
-
-```bash
-docker compose down -v
-```
-
-Then make sure the compose file includes:
-
-```yaml
-environment:
-  - discovery.type=single-node
-  - xpack.security.enabled=false
-```
-
-Finally, bring the stack back up:
-
-```bash
-docker compose up -d
+docker compose exec elasticsearch ls /usr/share/elasticsearch/config/certs/ca/ca.crt
 ```
 
 ## Useful Commands
 
 ```bash
-# Start services
-docker compose up -d
-
-# Stop services
-docker compose down
-
-# Stop and remove volumes
-docker compose down -v
-
-# Show containers
+# View service status
 docker compose ps
 
-# View logs
+# Follow all service logs
 docker compose logs -f
 
-# Check Elasticsearch health
-curl http://localhost:9200
+# Follow one service
+docker compose logs -f logstash
+
+# Stop containers while preserving data and certificates
+docker compose down
+
+# Stop containers and remove persistent Docker volumes
+docker compose down -v
 ```
-## Adding log agants
 
-### Winlog
-        TODO
+Removing volumes deletes Elasticsearch data and generated certificates. The next startup will generate a new CA and initialize the security configuration again.
 
-
-
+---
 
 ## Troubleshooting
 
-If the stack is not healthy:
+1. Check the service state with `docker compose ps`.
+2. Inspect startup failures with `docker compose logs setup elasticsearch bootstrap`.
+3. Confirm that the required values in `.env` are not still placeholders.
+4. Confirm Elasticsearch health with `docker compose logs elasticsearch` and the authenticated HTTPS request above.
+5. Confirm that Filebeat or another Beats client is sending events to port `5044`.
+6. Check Logstash output and connection errors with `docker compose logs -f logstash`.
+7. If credentials or security settings changed, recreate the stack with `docker compose down -v` and start it again.
+---
 
-1. Verify the containers are running with `docker compose ps`
-2. Inspect logs with `docker compose logs -f elasticsearch` and `docker compose logs -f kibana`
-3. Ensure Elasticsearch responds on `http://localhost:9200`
-4. Confirm Logstash is listening on ports `5044` and `5000`
-5. If you changed security settings, recreate the persistent data volume as needed
+## Adding log agants
 
-## Notes
+### filebeat (linux)
+        TODO
+### Winlogbeat (Windows)
+        TODO
 
-- The project is intended for local testing, monitoring labs, and development environments.
-- Elasticsearch data is stored in a Docker volume to survive container restarts.
-- The current configuration is a single-node setup, so it is best suited for local or lab workloads rather than production deployments.
+---
+
+## Security and Scope
+
+Security is enabled by default. Elasticsearch and Logstash communicate over HTTPS, and Logstash uses a dedicated account limited to writing `filebeat-*` indices. Keep this deployment on a trusted lab network, protect `.env`, and never commit passwords, private keys, certificates, or generated data.
+
+This is a single-node lab deployment, not a production-ready cluster. For production use, add a multi-node Elasticsearch design, external secret management, backups, resource limits, and access controls appropriate to the environment.
 
 ## License
 
-This project is intended for local monitoring and lab use.
-
-
+This stack is part of the HomeLab project and is intended for local monitoring and lab use.
