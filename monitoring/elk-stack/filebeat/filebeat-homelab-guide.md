@@ -23,20 +23,19 @@
 
 ```mermaid
 flowchart LR
-    User[Web Browser] --> Kibana[Kibana\n192.168.1.xxx:5601]
-    Kibana --> ES[Elasticsearch\n192.168.1.xxx:9200]
-    ES --> Logstash[Logstash\n192.168.1.xxx:5044]
-    Logstash --> Node[Log Generator / Node1\n192.168.1.xxx]
+  User["Web Browser"] --> Kibana["Kibana<br/>192.168.1.xxx:5601"]
+  Kibana --> ES["Elasticsearch<br/>192.168.1.xxx:9200"]
 
-    subgraph Node[Log Generator / Node1]
-        Nginx[Nginx module\n/var/log/nginx/*.log]
-        System[System module\n/var/log/syslog*, /var/log/auth.log*]
-        App[Custom filestream\n/var/log/lab-dumLogs/application.log]
-    end
+  subgraph LogGenerator ["Log Generator / Node1<br/>192.168.1.xxx"]
+    Nginx["Nginx module<br/>/var/log/nginx/*.log"]
+    System["System module<br/>/var/log/syslog*, /var/log/auth.log*"]
+    App["Custom filestream<br/>/var/log/lab-dumLogs/application.log"]
+  end
 
-    Nginx --> Logstash
-    System --> Logstash
-    App --> Logstash
+  Nginx -->|"Filebeat"| Logstash["Logstash<br/>192.168.1.xxx:5044"]
+  System -->|"Filebeat"| Logstash
+  App -->|"Filebeat"| Logstash
+  Logstash -->|"HTTPS"| ES
 ```
 
 ### Important design rule
@@ -479,8 +478,8 @@ The normal runtime architecture is:
 
 ```mermaid
 flowchart LR
-    Filebeat[Filebeat] -->|TCP 5044| Logstash[Logstash]
-    Logstash -->|HTTPS 9200| Elasticsearch[Elasticsearch]
+  Filebeat["Filebeat"] -->|"TCP 5044"| Logstash["Logstash"]
+  Logstash -->|"HTTPS 9200"| Elasticsearch["Elasticsearch"]
 ```
 
 ---
@@ -729,8 +728,8 @@ For example:
 
 ```mermaid
 flowchart LR
-    A[Filebeat nginx event] -->|@metadata.pipeline| B[filebeat-9.5.4-nginx-access-pipeline]
-    B --> C[Elasticsearch]
+  A["Filebeat nginx event"] -->|"@metadata.pipeline"| B["filebeat-9.5.4-nginx-access-pipeline"]
+  B --> C["Elasticsearch"]
 ```
 
 Without this routing, the module event will not receive the intended Elasticsearch ingest pipeline.
@@ -1658,23 +1657,23 @@ For Nginx:
 
 ```mermaid
 flowchart LR
-    Access[/var/log/nginx/access.log] --> Nginx[Filebeat nginx]
-    Error[/var/log/nginx/error.log] --> Nginx
-    Nginx -->|@metadata.pipeline| Logstash[Logstash]
-    Logstash --> Pipeline[filebeat-9.5.4-nginx-access-pipeline]
-    Pipeline --> ECS[parsed ECS fields]
-    ECS --> Index[filebeat-9.5.4-*]
-    Index --> Kibana[Kibana]
+  Access["/var/log/nginx/access.log"] --> Nginx["Filebeat nginx"]
+  Error["/var/log/nginx/error.log"] --> Nginx
+  Nginx -->|"@metadata.pipeline"| Logstash["Logstash"]
+  Logstash --> Pipeline["filebeat-9.5.4-nginx-access-pipeline"]
+  Pipeline --> ECS["parsed ECS fields"]
+  ECS --> Index["filebeat-9.5.4-*"]
+  Index --> Kibana["Kibana"]
 ```
 
 For the custom application log:
 
 ```mermaid
 flowchart LR
-    App[application.log] --> Filestream[filestream]
-    Filestream --> Logstash[Logstash]
-    Logstash --> Elasticsearch[Elasticsearch]
-    Elasticsearch --> Kibana[Kibana]
+  App["application.log"] --> Filestream["filestream"]
+  Filestream --> Logstash["Logstash"]
+  Logstash --> Elasticsearch["Elasticsearch"]
+  Elasticsearch --> Kibana["Kibana"]
 ```
 
 The custom input does not automatically get the Nginx/System module parsing.
@@ -1810,18 +1809,18 @@ SECURITY
 
 ```mermaid
 flowchart LR
-    subgraph CT[CT / VM\nLog Generator]
-        Nginx[Nginx\naccess.log / error.log]
-        Rsyslog[rsyslog\nsyslog / auth.log]
-        App[application.log]
-    end
+  subgraph CT ["CT / VM<br/>Log Generator"]
+    Nginx["Nginx<br/>access.log / error.log"]
+    Rsyslog["rsyslog<br/>syslog / auth.log"]
+    App["application.log"]
+  end
 
-    Nginx --> Filebeat[Filebeat]
-    Rsyslog --> Filebeat
-    App --> Filebeat
-    Filebeat -->|TCP 5044| Logstash[Logstash\n@metadata.pipeline]
-    Logstash -->|HTTPS 9200| ES[Elasticsearch\nfilebeat-*]
-    ES --> Kibana[Kibana\nDiscover / Dashboards / Visualizations]
+  Nginx --> Filebeat["Filebeat"]
+  Rsyslog --> Filebeat
+  App --> Filebeat
+  Filebeat -->|"TCP 5044"| Logstash["Logstash<br/>@metadata.pipeline"]
+  Logstash -->|"HTTPS 9200"| ES["Elasticsearch<br/>filebeat-*"]
+  ES --> Kibana["Kibana<br/>Discover / Dashboards / Visualizations"]
 ```
 
 ---
