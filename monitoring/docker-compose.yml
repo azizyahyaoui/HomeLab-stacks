@@ -12,6 +12,9 @@ services:
     volumes:
       - ./prometheus/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/data:/prometheus
+      # Mount the host's timezone and localtime to ensure Prometheus uses the correct time settings:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - monitoring-net
 

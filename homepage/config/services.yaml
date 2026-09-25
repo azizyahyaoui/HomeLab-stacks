@@ -35,16 +35,31 @@
         icon: wazuh
         siteMonitor: {{HOMEPAGE_VAR_WAZUH_URL}}
 
+    - Grafana:
+        icon: grafana
+        href: {{HOMEPAGE_VAR_GRAFANA_URL}}
+        description: Dashboards & Visualization
+        siteMonitor: {{HOMEPAGE_VAR_GRAFANA_URL}}
+        widget:
+          type: grafana
+          url: {{HOMEPAGE_VAR_GRAFANA_URL}}
+          username: admin  # Replace with your actual user if changed
+          password: {{HOMEPAGE_VAR_GRAFANA_PASSWORD}}  # Replace with your actual password if changed
+          refreshInterval: 10000
+
     - Prometheus:
         icon: prometheus.png
-        href: http://<your-prometheus-ip>:9090 #later
+        href: {{HOMEPAGE_VAR_PROMETHEUS_URL}}
+        siteMonitor: {{HOMEPAGE_VAR_PROMETHEUS_URL}}
         widget:
           type: prometheusmetric
-          #url: http://<your-prometheus-ip>:9090
+          url: {{HOMEPAGE_VAR_PROMETHEUS_URL}}
           refreshInterval: 10000
           metrics:
             - label: CPU Usage
               query: round(avg(instance:node_cpu_utilisation:rate5m) * 100, 0.1)
+              format:
+                type: number
               suffix: '%'
 
 - Logging:
