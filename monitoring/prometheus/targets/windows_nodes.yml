@@ -1,0 +1,8 @@
+#--------------------------------------------------------------------------
+# Windows Nodes: Native Windows hosts (VMs, bare metal)
+#--------------------------------------------------------------------------
+- targets: 
+    - "192.168.1.100:9182"       # Example: Your main Windows host
+  labels:
+    os: "windows"
+    role: "hypervisor"           # Example label for Windows hosts

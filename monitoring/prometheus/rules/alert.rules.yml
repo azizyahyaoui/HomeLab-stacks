@@ -1,0 +1,36 @@
+#---------------------------------------------------------------------------
+# Prometheus Alerting Rules
+#---------------------------------------------------------------------------
+
+groups:
+  - name: infra-alerts
+    rules:
+    # RuleNumber: 1 --> Instance Down Alert
+      - alert: InstanceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} is down"
+          description: "Target {{ $labels.job }}/{{ $labels.instance }} has been unreachable for 2 minutes."
+
+      # RuleNumber: 2 --> High CPU Load Alert
+      - alert: HighCPULoad
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: "CPU usage above 85% for 5 minutes."
+
+      # RuleNumber: 3 --> Blackbox Probe Failed Alert(Which means the Blackbox Exporter failed to reach a target)
+      - alert: BlackboxProbeFailed
+        expr: probe_success == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Probe failed: {{ $labels.instance }}"
+          description: "Blackbox probe against {{ $labels.instance }} has been failing for 1 minute."

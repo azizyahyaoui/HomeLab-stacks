@@ -1,0 +1,9 @@
+#--------------------------------------------------------------------------
+# Linux Nodes: Docker container & native Linux hosts (VMs, CTs, bare metal)
+#--------------------------------------------------------------------------
+- targets: 
+    - "node-exporter:9100"       # The local 
+    - "192.168.1.50:9100"        # Example: Your Ubuntu Server VM
+  labels:
+    os: "linux"
+    environment: "homelab"

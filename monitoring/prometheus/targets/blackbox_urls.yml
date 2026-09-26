@@ -1,0 +1,8 @@
+#--------------------------------------------------------------------------
+# Blackbox Exporter: HTTP endpoints, websites, and other network services
+# - targets:
+#   - "https://example.com"
+#--------------------------------------------------------------------------
+- targets:
+    - "http://192.168.1.200:3000" # Example: Homepage dashboard
+    - "https://192.168.1.50"      # Example: Wazuh web interface

@@ -2,6 +2,17 @@
 # For configuration options and examples, please see:
 # https://gethomepage.dev/configs/services/
 
+- Work:
+    - Github:
+        icon: github.svg
+        href: "{{HOMEPAGE_VAR_GITHUB_URL}}"
+        description: Code Repository
+
+    - Slack:
+        icon: slack.svg
+        href: "{{HOMEPAGE_VAR_SLACK_URL}}"
+        description: Team Communication
+
 - Servers:
     - Proxmox:
         href: {{HOMEPAGE_VAR_PROXMOX_HOST}}
@@ -27,13 +38,14 @@
             key: "{{HOMEPAGE_VAR_PORTAINER_KEY}}"
             env: {{HOMEPAGE_VAR_PORTAINER_ENV_NUMBER}}
 
-
-- Monitoring:
+- SOC:
     - Wazuh:
         href: {{HOMEPAGE_VAR_WAZUH_URL}}            # URL you click to open the web interface
         description: SIEM & Threat Hunting
         icon: wazuh
         siteMonitor: {{HOMEPAGE_VAR_WAZUH_URL}}
+
+- Monitoring:
 
     - Grafana:
         icon: grafana
@@ -45,6 +57,16 @@
           url: {{HOMEPAGE_VAR_GRAFANA_URL}}
           username: admin  # Replace with your actual user if changed
           password: {{HOMEPAGE_VAR_GRAFANA_PASSWORD}}  # Replace with your actual password if changed
+          refreshInterval: 10000
+    
+    - Alertmanager:
+        icon: alertmanager.png
+        href: {{HOMEPAGE_VAR_ALERTMANAGER_URL}}
+        description: Alertmanager
+        siteMonitor: {{HOMEPAGE_VAR_ALERTMANAGER_URL}}
+        widget:
+          type: alertmanager
+          url: {{HOMEPAGE_VAR_ALERTMANAGER_URL}}
           refreshInterval: 10000
 
     - Prometheus:
