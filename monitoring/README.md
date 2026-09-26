@@ -1,166 +1,192 @@
-# Home Lab Monitoring: Prometheus & Grafana Stack
+# Home Lab Monitoring
 
-This directory contains the Docker Compose configuration and persistent data volumes for the core monitoring stack on host **CT 101**. This stack utilizes **[Prometheus](https://prometheus.io/)** for time-series data collection and **[Grafana](https://grafana.com/)** for rich data visualization.
-
-## Overview
-* **Monitoring Stack:** Centralized infrastructure and application monitoring engine for host CT 101 and external nodes.
-* **Prometheus:** An open-source systems monitoring and alerting toolkit. It works on a **pull model**, meaning it actively scrapes (pulls) metrics from configured targets (like servers, containers, or applications) over HTTP at regular intervals. It stores this data locally in a highly efficient time-series database (TSDB).
-* **Grafana:** A multi-platform open-source analytics and interactive visualization web application. It connects to Prometheus (and other data sources) to query data and display it through customizable dashboards.
+Prometheus, Alertmanager, Grafana, Node Exporter, and Blackbox Exporter run as a Docker Compose stack on **CT 101**. Prometheus collects metrics and evaluates alert rules, Alertmanager delivers email and Slack notifications, and Grafana provides dashboards.
 
 ## Architecture
 
-Below is the data flow for the monitoring stack:
-
 ```mermaid
-graph LR
-    subgraph Host["CT 101"]
-        subgraph Targets["Data Sources"]
-            NE["Node Exporter"]
-            APP["App Containers"]
-        end
-        
-        subgraph Stack["Monitoring Stack"]
-            PROM[("Prometheus<br/>:9090")]
-            GRAF["Grafana<br/>:3000"]
-        end
-    end
+flowchart LR
+    Linux[Linux exporters]
+    Windows[windows_exporter]
+    HTTP[HTTP endpoints]
+    Prom[Prometheus :9090]
+    Alert[Alertmanager :9093]
+    Grafana[Grafana :3000]
+    Blackbox[Blackbox Exporter :9115]
 
-    PROM -->|"Scrapes metrics (HTTP Pull)"| NE
-    PROM -->|"Scrapes metrics (HTTP Pull)"| APP
-    GRAF -->|"Queries data (PromQL)"| PROM
-
-    classDef stack fill:#2b2b2b,stroke:#666,stroke-width:2px,color:#fff;
-    class PROM,GRAF stack;
+    Linux -->|metrics| Prom
+    Windows -->|metrics| Prom
+    HTTP --> Blackbox
+    Blackbox -->|probe metrics| Prom
+    Prom -->|alerts| Alert
+    Grafana -->|PromQL| Prom
 ```
 
-## Directory Structure
+The local `node-exporter` container monitors the Linux host running this stack. Remote Linux systems should run Node Exporter on their own operating system. Windows systems should run `windows_exporter` natively as a Windows service.
+
+## Services and ports
+
+| Service | Port | Purpose |
+| --- | ---: | --- |
+| Prometheus | `9090` | Metrics storage, queries, targets, and alert rules |
+| Alertmanager | `9093` | Alert grouping and email/Slack notifications |
+| Grafana | `3000` | Dashboards and Prometheus visualization |
+| Node Exporter | `9100` | Metrics for the local Linux host |
+| Blackbox Exporter | `9115` | HTTP, TCP, and ICMP probes |
+
+The services are exposed on the Docker host. Replace `<CT-101-IP>` with the host address when connecting from another machine.
+
+## Repository layout
 
 ```text
-/opt/
-└── stacks/
-    └── monitoring/
-        ├── docker-compose.yml   # The deployment configuration
-        ├── .env                 # Environment variables (version tags)
-        ├── prometheus/
-        │   ├── config/          # Contains prometheus.yml
-        │   └── data/            # Persistent Time-Series Database (TSDB)
-        │
-        └── grafana/
-            ├── config/          # Optional: provisioning profiles (dashboards/datasources)
-            └── data/            # Persistent Grafana sqlite DB and plugins
+/opt/stacks/monitoring/
+├── docker-compose.yml
+├── .env                         # local secrets and image versions
+├── .env.sample                  # safe configuration template
+├── alertmanager/
+│   ├── alertmanager.yml.tmpl    # uses ${...} variables
+│   ├── config/alertmanager.yml  # generated at startup
+│   └── data/                    # Alertmanager state
+├── grafana/
+│   ├── provisioning/            # datasource and dashboard settings
+│   └── data/                    # Grafana database and plugins
+└── prometheus/
+    ├── config/prometheus.yml
+    ├── targets/                 # file-based scrape targets
+    ├── rules/alert.rules.yml
+    ├── blackbox/blackbox.yml
+    └── data/                    # Prometheus TSDB
 ```
 
-## Deployment & Setup
+## Configuration
 
-Before deploying, ensure the data directories have the correct permissions so the non-root Docker containers can write to them:
+Create the local environment file from the template and replace every placeholder:
 
 ```bash
-# Set permissions for Prometheus (runs as nobody / uid 65534)
-sudo chown -R 65534:65534 /opt/stacks/monitoring/prometheus/data
+cd /opt/stacks/monitoring
+cp .env.sample .env
+nano .env
+```
 
-# Set permissions for Grafana (runs as uid 472)
-sudo chown -R 472:472 /opt/stacks/monitoring/grafana/data
+`.env` supplies image versions, Grafana credentials, SMTP settings, the destination email address, and the Slack webhook. Keep it private and do not commit it.
 
-# Start the stack
+### Add scrape targets
+
+Edit the file that matches the target type. The files use Prometheus file-based discovery and are mounted read-only into the Prometheus container.
+
+- `prometheus/targets/linux_nodes.yml`: Linux Node Exporter targets on port `9100`.
+- `prometheus/targets/windows_nodes.yml`: Windows Exporter targets on port `9182`.
+- `prometheus/targets/blackbox_urls.yml`: URLs to probe through Blackbox Exporter.
+
+Each target can include labels such as `os`, `environment`, or `role`. Prometheus watches these files and will pick up changes after its next discovery refresh; use the reload command below when an immediate configuration reload is needed.
+
+### Install Windows Exporter
+
+Install `windows_exporter` natively on each Windows host. The default endpoint is `http://<windows-ip>:9182/metrics`.
+
+```powershell
+msiexec /i windows_exporter-0.31.8-amd64.msi ENABLED_COLLECTORS="cpu,cs,logical_disk,net,os,service,system,memory"
+New-NetFirewallRule -DisplayName "windows_exporter" -Direction Inbound -Protocol TCP -LocalPort 9182 -Action Allow
+```
+
+Then add the host to `prometheus/targets/windows_nodes.yml`.
+
+### Blackbox probes
+
+The configured modules are `http_2xx`, `tcp_connect`, and `icmp_ping`. ICMP requires the `NET_RAW` capability already granted to the Blackbox container. Add URLs to `blackbox_urls.yml` and use the HTTP module unless a different probe module is explicitly configured in `prometheus/config/prometheus.yml`.
+
+## Deploy
+
+The containers run as UID/GID `1000`. Ensure the bind-mounted data directories are writable before the first start:
+
+```bash
+sudo chown -R 1000:1000 prometheus/data alertmanager/data grafana/data
+docker compose config --quiet
 docker compose up -d
+docker compose ps
 ```
 
-## Ports & Access
+The `alertmanager-init` service runs first. It installs `gettext` in a temporary Alpine container, substitutes values from `.env` into `alertmanager.yml.tmpl`, and writes the generated file to `alertmanager/config/alertmanager.yml`. Alertmanager starts only after this step succeeds.
 
-| Service | Port | URL | Default Credentials | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| **Grafana** | `3000` | `http://<CT-101-IP>:3000` | `admin` / `admin` | Main UI for viewing dashboards and managing data sources. |
-| **Prometheus** | `9090` | `http://<CT-101-IP>:9090` | *None* | Raw metrics interface, target status, and PromQL testing. |
+Check the web interfaces:
 
-## Understanding Metrics
+| URL | Check |
+| --- | --- |
+| `http://<CT-101-IP>:9090/targets` | Scrape targets are `UP` |
+| `http://<CT-101-IP>:9090/rules` | Alert rules loaded successfully |
+| `http://<CT-101-IP>:9093` | Alertmanager status and active alerts |
+| `http://<CT-101-IP>:3000` | Grafana login and dashboards |
+| `http://<CT-101-IP>:9115/probe?target=https://example.com&module=http_2xx` | Manual Blackbox probe |
 
-Prometheus stores data as time-series. Every time-series is uniquely identified by its **metric name** and optional key-value pairs called **labels**.
+Grafana provisions the Prometheus datasource automatically. Dashboards placed under `grafana/provisioning/dashboards/json` are discovered by the configured dashboard provider.
 
-There are three main types of metrics you will encounter:
+## Operations
 
-1. **Counters:** A cumulative metric that only goes up (e.g., `http_requests_total`). Useful for measuring rates.
-2. **Gauges:** A metric that can go up and down (e.g., `memory_usage_bytes`, `temperature`).
-3. **Histograms:** Samples observations (usually request durations or response sizes) and counts them in configurable buckets.
+View logs:
 
-## PromQL Basics (Prometheus Query Language)
-
-PromQL is the language used in Grafana and Prometheus to query data. Essential examples:
-
-* **Instant Vector (Current state):**
-  Returns the latest value of a metric.
-  *Example:* `up` (Shows `1` if a target is reachable, `0` if down).
-
-* **Filtering by Labels:**
-  Use curly braces to filter specific data.
-  *Example:* `up{job="prometheus"}` (Shows status for the Prometheus self-monitoring job).
-
-* **Rates (Crucial for Counters):**
-  Calculates per-second average rate of increase over a time window.
-  *Example:* `rate(http_requests_total[5m])` (Per-second rate of HTTP requests over the last 5 minutes).
-
-* **Math and Aggregation:**
-  Combine metrics or aggregate across instances.
-  *Example:* `sum(memory_usage_bytes) by (container_name)` (Total memory usage grouped by container name).
-
-## Prometheus Data Flow
-
-This diagram shows Prometheus service discovery, metric retrieval, storage, alerting, and visualization:
-
-```mermaid
-flowchart TD
-    %% Service Discovery
-    subgraph SD["Service Discovery"]
-        direction LR
-        K8s["Kubernetes"]
-        FileSD["File-based discovery"]
-    end
-
-    %% Prometheus Server Core
-    subgraph PS["Prometheus Server"]
-        direction LR
-        R["Retrieval"] --> TSDB[("TSDB")]
-        TSDB <--> HTTP["HTTP Server"]
-    end
-
-    %% Storage
-    subgraph Node["Node Storage"]
-        HDD["HDD / SSD"]
-    end
-
-    TSDB -.-> HDD
-    PS -.->|"Discovers targets"| SD
-
-    %% External Targets
-    SLJ["Short-lived jobs"] -->|"Push metrics at exit"| PG["Pushgateway"]
-    JE["Jobs / Exporters"]
-
-    R -->|"Pull metrics"| PG
-    R -->|"Pull metrics"| JE
-
-    %% Alerting Pipeline
-    subgraph Alerting["Prometheus Alerting"]
-        AM["Alertmanager"]
-    end
-
-    PS -->|"Push alerts"| AM
-    AM -.->|"Notify"| PD["PagerDuty"]
-    AM -.->|"Notify"| Email["Email"]
-    AM -.->|"Notify"| Etc["Other integrations"]
-
-    %% Visualization and UI
-    subgraph DataViz["Data Visualization and Export"]
-        WebUI["Prometheus Web UI"]
-        Graf["Grafana"]
-    end
-
-    WebUI -->|"PromQL queries"| HTTP
-    Graf -->|"PromQL queries"| HTTP
+```bash
+docker compose logs -f prometheus
+docker compose logs -f alertmanager
+docker compose logs -f grafana
 ```
 
-### Data Flow Summary
+Reload Prometheus after changing `prometheus/config/prometheus.yml`, rules, or target files:
 
-1. Prometheus discovers targets through Kubernetes or file-based service discovery.
-2. The retrieval component scrapes metrics from exporters, jobs, and Pushgateway.
-3. Metrics are stored in Prometheus's local time-series database.
-4. Grafana and the Prometheus web UI query metrics through the HTTP server.
-5. Alerting rules send alerts to Alertmanager, which forwards notifications to configured integrations.
+```bash
+curl -X POST http://localhost:9090/-/reload
+```
+
+Validate the Compose file before applying changes:
+
+```bash
+docker compose config --quiet
+```
+
+Restart or stop the stack:
+
+```bash
+docker compose restart
+docker compose down
+```
+
+`docker compose down` removes containers and the network but leaves the bind-mounted data directories intact.
+
+## Alert rules and notification flow
+
+The current rules are in `prometheus/rules/alert.rules.yml`:
+
+- `InstanceDown`: a scrape target is unreachable for two minutes.
+- `HighCPULoad`: Linux CPU usage exceeds 85 percent for five minutes.
+- `BlackboxProbeFailed`: a configured probe fails for one minute.
+
+Critical alerts route to the `critical-alerts` receiver. Normal alerts use the `default` receiver. Both receivers send resolved notifications when enabled by the Alertmanager template.
+
+To test the local exporter alert path:
+
+```bash
+docker compose stop node-exporter
+```
+
+After the `for: 2m` period, check Prometheus and Alertmanager for `InstanceDown`. Restore the exporter afterward:
+
+```bash
+docker compose start node-exporter
+```
+
+## Security notes
+
+- Do not expose Prometheus, Alertmanager, or the Blackbox endpoint directly to the internet. Put the web UIs behind the existing reverse proxy with TLS and authentication.
+- Use a Gmail app password or provider-specific SMTP credential, never a normal account password.
+- Treat `.env` and the generated `alertmanager/config/alertmanager.yml` as secrets. Ensure both are ignored by Git and have restrictive permissions.
+- The current rendered Alertmanager config in this checkout contains credential material. Rotate the SMTP credential and Slack webhook immediately, remove the rendered secret-bearing file from version control/history if it was committed, and regenerate it from `.env`.
+- Keep image versions pinned in `.env` and upgrade them deliberately.
+
+## References
+
+- [Prometheus documentation](https://prometheus.io/docs/)
+- [Alertmanager configuration](https://prometheus.io/docs/alerting/latest/configuration/)
+- [Grafana provisioning](https://grafana.com/docs/grafana/latest/administration/provisioning/)
+- [Node Exporter](https://github.com/prometheus/node_exporter)
+- [Windows Exporter](https://github.com/prometheus-community/windows_exporter)
+- [Blackbox Exporter](https://github.com/prometheus/blackbox_exporter)
+- [Docker Compose](https://docs.docker.com/compose/)
