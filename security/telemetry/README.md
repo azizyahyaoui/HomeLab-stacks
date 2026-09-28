@@ -1,0 +1,61 @@
+# Security Telemetry
+
+Host-level security event collection for the homelab. This project is the place
+to develop and document Linux `auditd` rules and Microsoft `Sysmon` configurations
+for Windows and Linux hosts.
+
+Collected events are intended to support investigation and detection. This
+project is designed to integrate with other security monitoring and log analysis
+solutions, such as Wazuh and the repository's ELK Stack, for centralized
+collection, correlation, and search. These integrations are planned; collection
+and forwarding are not configured yet.
+
+## Project status
+
+This directory is a starter scaffold. No audit rules or Sysmon configurations
+are currently present, and there are no deployment or forwarding instructions
+yet. Treat the files here as work in progress until a configuration has been
+tested on a representative host.
+
+## Directory layout
+
+| Path | Purpose |
+| --- | --- |
+| `auditd/rules/` | Linux audit rules for security-relevant system activity. |
+| `sysmon/linux/configs/` | Sysmon for Linux configuration files. |
+| `sysmon/windows/configs/` | Sysmon for Windows configuration files. |
+| `sysmon/sysmon.md` | Sysmon setup and operating notes. |
+
+## Intended workflow
+
+1. Define the hosts and security events this project needs to cover.
+2. Add a focused, documented configuration for each supported platform.
+3. Test configuration syntax and event volume on a non-critical host.
+4. Confirm events are useful, timestamps are consistent, and sensitive data
+	 is not collected unnecessarily.
+5. Document installation, validation, updates, and rollback before wider use.
+6. Plan and verify forwarding, retention, and access controls before connecting
+	 event sources to a central log store.
+
+## Operational considerations
+
+- Start with a small set of high-value events. Broad audit policies can create
+	substantial log volume and affect host performance.
+- Review rules and Sysmon selections for privacy and data-minimization concerns
+	before enabling them.
+- Keep platform-specific setup steps and version requirements with the relevant
+	configuration documentation.
+- Do not commit host identifiers, credentials, private data, or generated event
+	logs. Keep host-specific overrides out of shared baseline configurations.
+- Establish log rotation, retention, access control, and clock synchronization
+	before relying on telemetry for investigations.
+
+## Next steps
+
+- Choose a supported Linux distribution and document the `auditd` version and
+	service-management assumptions.
+- Add an initial, commented audit ruleset and a validation procedure.
+- Choose the Sysmon configuration sources and supported Linux/Windows versions.
+- Document installation, updates, and rollback in `sysmon/sysmon.md`.
+- Decide how events will be shipped to Wazuh and/or the ELK Stack, then document
+	and test each integration separately.
