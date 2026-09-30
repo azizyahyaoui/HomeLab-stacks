@@ -1,6 +1,8 @@
 # Sysmon
 
-Sysmon (System Monitor) is a Microsoft host-monitoring utility that records
+## Introduction
+
+So Sysmon (System Monitor) is a Microsoft host-monitoring utility that records
 detailed system activity for security investigation and detection. This guide
 covers Sysmon for Windows and Sysmon for Linux; their installation, event
 formats, and log destinations are platform-specific.
@@ -46,7 +48,12 @@ depends on the active configuration.
 
 Sysmon for Windows writes to the `Microsoft-Windows-Sysmon/Operational`
 channel. In Event Viewer, find it under **Applications and Services Logs** >
-**Microsoft** > **Windows** > **Sysmon** > **Operational**.
+**Microsoft** > **Windows** > **Sysmon** > **Operational**. On Windows hosts,
+the underlying event log files live in the standard Windows Event Log directory:
+`C:\Windows\System32\Winevt\Logs`.
+
+The Sysmon operational log is typically stored in the EVTX file associated with
+that channel, and it can be reviewed directly or collected by a log forwarder.
 
 From PowerShell, inspect recent events with:
 
@@ -118,3 +125,44 @@ Before relying on an integration, verify that events arrive with timestamps and
 structured fields intact, that parsing is correct, and that retention and access
 controls meet the needs of the environment.
 
+## Custom Rules
+TODO
+
+### Wazuh custom rules
+
+> [!NOTE]
+> **THIS PART NEED WAZUH UP AND RUNNING!**
+
+Wazuh can collect and analyze Sysmon events, but it does not replace a
+carefully designed Sysmon configuration. Sysmon determines which activity is
+recorded; Wazuh decodes the resulting events and applies rules, severity, and
+alerting. Configure both components together and validate the complete path
+from the Windows host to the Wazuh manager before relying on an alert.
+
+For a practical walkthrough of using Sysmon for advanced Windows monitoring,
+see the [Wazuh-SIEM lab guide](https://github.com/azizyahyaoui/Wazuh-SIEM/blob/master/course/WazuhSIEM.md#use-sysmon-for-advanced-windows-monitoring).
+The corresponding example configuration is available as the
+[Wazuh Sysmon configuration in this repository](https://github.com/azizyahyaoui/HomeLab-stacks/blob/master/security/telemetry/sysmon/Wazuh/wazuh_sysmonconf.xml).
+Wazuh also publishes a maintained example in its
+[Sysmon configuration resource](https://wazuh.com/resources/blog/emulation-of-attack-techniques-and-detection-with-wazuh/sysmonconfig.xml).
+
+#### Deployment guidance
+
+- Treat these configurations as reference material. Review every rule,
+	exclude known-good software, and test changes on representative hosts before
+	deploying them broadly.
+- Keep Sysmon collection focused on events that support an investigation.
+	High-volume events, especially image-load and network telemetry, can increase
+	storage, processing, and alert noise.
+- Confirm that the Wazuh agent collects the Sysmon channel and that the manager
+	receives structured event fields, including the event ID, timestamp, host,
+	process image, command line, user, and hashes where available.
+- Tune Wazuh rules separately from Sysmon filters. A Sysmon exclusion prevents
+	the event from being collected, while a Wazuh rule exclusion only changes
+	downstream analysis.
+- Document the configuration version, local modifications, deployment scope,
+	and rollback procedure. Do not commit credentials or collected event data.
+
+After each change, generate safe test activity, verify the event in the
+Windows Sysmon Operational channel, confirm its arrival in Wazuh, and check
+that the resulting alert contains enough context for investigation.
