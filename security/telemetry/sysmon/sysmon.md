@@ -130,8 +130,8 @@ TODO
 
 ### Wazuh custom rules
 
-> [!NOTE]
-> <span style="color: yellow;"> **THIS PART NEED WAZUH UP AND RUNNING!** </span>
+> [!WARNING]
+> **THIS PART NEED WAZUH UP AND RUNNING!**
 
 Wazuh can collect and analyze Sysmon events, but it does not replace a
 carefully designed Sysmon configuration. Sysmon determines which activity is
