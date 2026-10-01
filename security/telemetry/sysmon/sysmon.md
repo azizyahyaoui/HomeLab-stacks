@@ -115,10 +115,12 @@ structured event fields as well as the rendered message.
    .\Sysmon64.exe -c --
    ```
 
-7.  Uninstall 
+7.  Uninstall
+   
   ```powershell
   .\Sysmon64.exe -u
   ```
+
 Consult Microsoft's documentation for architecture-specific executable names,
 command options, upgrades, and removal. Test installation and configuration
 changes on a non-critical host before wider deployment.
