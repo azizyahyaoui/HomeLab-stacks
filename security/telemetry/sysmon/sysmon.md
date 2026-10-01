@@ -1,374 +1,627 @@
-# Sysmon
+# Sysmon — Host Telemetry
 
-## Introduction
+Sysmon (System Monitor) is a host telemetry tool that records detailed system activity so other security tools can collect, correlate, and investigate it.
 
-Sysmon (System Monitor) is a Microsoft host-monitoring utility that records
-detailed system activity for security investigation and detection. This guide
-covers Sysmon for Windows and Sysmon for Linux; their installation, event
-formats, and log destinations are platform-specific.
+This document is the **core Sysmon reference for this homelab**. It focuses on:
+
+- What Sysmon is and where it fits
+- Windows and Linux telemetry
+- Installation and verification
+- Configuration and filtering
+- Useful event types
+- Operational practices
+- Small hands-on telemetry experiments
+
+Wazuh and ELK are downstream consumers of this telemetry. Their detailed integration work belongs outside this core document.
 
 ## Official documentation
 
-- [Sysmon for Windows](https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon)
+- [Sysmon for Windows](https://learn.microsoft.com/sysinternals/downloads/sysmon)
+- [Sysmon overview](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/overview)
+- [Enable and configure Sysmon](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/how-to-enable-sysmon)
+- [Sysmon configuration files](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/sysmon-configuration-files)
+- [Sysmon events](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/sysmon-events)
 - [Sysmon for Linux](https://github.com/microsoft/SysmonForLinux)
 
-## What Sysmon does
+---
 
-Sysmon installs a host service and, on Windows, a driver that observe selected
-system activity and write events for other tools to collect. Depending on the
-platform and configuration, events can describe process creation, network
-connections, image loads, file activity, registry activity, and DNS queries.
-The configuration controls which event types are collected and filtered.
+## 1. What Sysmon is
 
-Sysmon is a telemetry source, not an antivirus, endpoint detection and response
-(EDR) product, or prevention control. It does not decide whether activity is
-malicious, block processes, or replace operating-system auditing. Detection
-depends on the events collected, their context, and the analysis performed by
-another tool.
+Sysmon provides detailed, low-level telemetry about activity on a host.
 
-Sysmon can help filter telemetry, reduce storage and SIEM licensing costs, and
-limit detection noise. It also enhances SIEM coverage by filling visibility
-gaps with detailed host activity.
+Depending on the platform and configuration, it can record information such as:
 
-## Windows event reference
+- Process creation and termination
+- Parent/child process relationships
+- Command lines
+- Process and file hashes
+- Network connections
+- DNS queries
+- Driver and image loading
+- File creation and deletion
+- Registry activity
+- Named pipes
+- WMI activity
+- Process tampering
+- Sysmon configuration changes
 
-These commonly useful Windows event IDs are a starting point, not a complete
-coverage checklist. Confirm the event definitions against Microsoft's current
-documentation and the deployed Sysmon version. Whether an event is generated
-depends on the active configuration.
+The exact events available and the way they are configured depend on the Sysmon platform and version.
 
-| Event ID | Event              | Typical investigative value                                     |
-| -------- | ------------------ | --------------------------------------------------------------- |
-| 1        | Process creation   | Process command line, parent process, hashes, and user context. |
-| 3        | Network connection | Network connections associated with a process.                  |
-| 6        | Driver loaded      | Driver image and signature information.                         |
-| 7        | Image loaded       | DLL and executable image loads; can be high volume.             |
-| 10       | Process access     | One process opening or accessing another process.               |
-| 11       | File created       | File creation activity.                                         |
-| 12-14    | Registry events    | Registry key/value creation, deletion, or value changes.        |
-| 22       | DNS query          | DNS queries associated with a process.                          |
+### What Sysmon is not
 
-### Windows Event Log
+Sysmon is **not**:
 
-Sysmon for Windows writes to the `Microsoft-Windows-Sysmon/Operational`
-channel. In Event Viewer, find it under **Applications and Services Logs** >
-**Microsoft** > **Windows** > **Sysmon** > **Operational**. On Windows hosts,
-the underlying event log files live in the standard Windows Event Log directory:
-`C:\Windows\System32\Winevt\Logs`.
+- An antivirus
+- An EDR
+- A SIEM
+- A firewall
+- A prevention engine
+- A detection engine by itself
 
-The Sysmon operational log is typically stored in the EVTX file associated with
-that channel, and it can be reviewed directly or collected by a log forwarder.
+Sysmon records observations. Another system can then interpret those observations.
 
-From PowerShell, inspect recent events with:
+For example:
 
-```powershell
+~~~
+Windows activity
+      │
+      ▼
+    Sysmon
+      │
+      ▼
+Windows Event Log
+      │
+      ├──────────► Wazuh ──────► Detection / Alerting
+      │
+      └──────────► ELK ────────► Search / Investigation / Visualization
+~~~
+
+A useful mental model for this lab:
+
+> **Sysmon = telemetry / eyes**  
+> **Wazuh = detection and response**  
+> **ELK = investigation and visualization**
+
+No single Sysmon event should automatically be treated as proof of malicious activity. The value comes from context and correlation across events.
+
+---
+
+## 2. Windows Sysmon
+
+### 2.1 Windows event channel
+
+Sysmon for Windows writes events to:
+
+<code>Microsoft-Windows-Sysmon/Operational</code>
+
+In Event Viewer:
+
+~~~
+Applications and Services Logs
+└── Microsoft
+    └── Windows
+        └── Sysmon
+            └── Operational
+~~~
+
+The underlying Windows Event Log files are stored under:
+
+<code>C:\Windows\System32\Winevt\Logs</code>
+
+From PowerShell:
+
+~~~powershell
 Get-WinEvent -LogName 'Microsoft-Windows-Sysmon/Operational' -MaxEvents 20 |
-	Select-Object TimeCreated, Id, ProviderName, Message
-```
+    Select-Object TimeCreated, Id, ProviderName, Message
+~~~
 
-The message is useful for manual inspection; collectors should preserve the
-structured event fields as well as the rendered message.
+When collecting Sysmon centrally, prefer the structured event fields rather than relying only on the rendered message.
 
-## Install and manage on Windows
+### 2.2 Useful Windows events
 
-1. Download Sysmon from the official Microsoft page above and review the
-   included license and usage information.
-2. Review the XML configuration before installing. Run the commands from an
-   elevated PowerShell session, substituting the reviewed configuration's
-   filename and path if they differ from, in my case is under `.\windows\config\sysmonconfig.xml`.
-3. Install Sysmon with a configuration:
+This is a practical starting reference, not a complete event catalogue.
 
-   ```powershell
-   .\Sysmon64.exe -accepteula -i .\sysmonconfig.xml
+| ID | Event | Why it matters |
+|---:|---|---|
+| 1 | Process Create | Execution, command line, parent process, hashes |
+| 2 | File creation time changed | Timestamp manipulation |
+| 3 | Network Connect | Process-to-network relationships |
+| 5 | Process Terminated | Execution timelines |
+| 6 | Driver Load | Kernel driver activity |
+| 7 | Image Load | DLL/executable loading; potentially high volume |
+| 8 | CreateRemoteThread | Cross-process thread creation |
+| 10 | Process Access | Process interaction and memory-access investigations |
+| 11 | File Create | Dropped files, staging, persistence artifacts |
+| 12–14 | Registry Event | Registry creation, deletion, and value changes |
+| 15 | FileCreateStreamHash | Alternate data stream activity |
+| 17–18 | Pipe Event | Named-pipe activity |
+| 19–21 | WMI Event | WMI persistence and activity |
+| 22 | DNS Query | Process-to-DNS relationships |
+| 23 / 26 | File Delete | File deletion, with different archival behavior |
+| 24 | Clipboard Change | Clipboard activity |
+| 25 | Process Tampering | Process image manipulation |
+| 27–29 | Executable file events | Executable detection/blocking telemetry |
+| 255 | Error | Sysmon internal errors |
 
-   System Monitor v15.22 - System activity monitor
-   By Mark Russinovich and Thomas Garnier
-   Copyright (C) 2014-2026 Microsoft Corporation
-   Using libxml2. libxml2 is Copyright (C) 1998-2012 Daniel Veillard. All Rights Reserved.
-   Sysinternals - www.sysinternals.com
+For the complete and version-specific event reference, use Microsoft's [Sysmon events documentation](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/sysmon-events).
 
-   Loading configuration file with schema version 4.90
-   Sysmon schema version: 4.91
-   Configuration file validated.
-   Sysmon64 installed.
-   SysmonDrv installed.
-   Starting SysmonDrv.
-   SysmonDrv started.
-   Starting Sysmon64..
-   Sysmon64 started.
-   ```
+### 2.3 Think in event chains
 
-   > Here sysmon startmon install driver for monitoring windows logs cause is talk direct to the windows kernel to detect any activity in the system especially for LOTL process creation and file modification and network connection and so on.
+Sysmon becomes more useful when events are correlated into a timeline.
 
-4. Verify that Sysmon is running and that expected events appear in the
-   Operational channel. A missing event can mean the event type is not enabled
-   or is filtered by the configuration.
-5. Apply a reviewed configuration update with:
+~~~
+User opens document
+      │
+      ▼
+Event 1 — Process Create
+      │
+      ▼
+Event 22 — DNS Query
+      │
+      ▼
+Event 3 — Network Connect
+      │
+      ▼
+Event 11 — File Create
+      │
+      ▼
+Event 12–14 — Registry activity
+~~~
 
-   ```powershell
-   .\Sysmon64.exe -c .\sysmonconfig.xml
-   ```
-
-6. To apply the default configuration:
-
-   ```powershell
-   .\Sysmon64.exe -c --
-   ```
-
-7.  Uninstall
-   
-    ```powershell
-    .\Sysmon64.exe -u
-    ```
-
-Consult Microsoft's documentation for architecture-specific executable names,
-command options, upgrades, and removal. Test installation and configuration
-changes on a non-critical host before wider deployment.
-
-## Linux
-
-Sysmon also can be used on Linux same as windows
-[Sysmon for Linux project documentation](https://github.com/microsoft/SysmonForLinux)
-for supported distributions, installation, configuration syntax, service
-management, and event output.
-
-Keep Linux-specific configurations under `linux/configs/` and document the
-tested distribution, Sysmon version, and log destination alongside each
-configuration. Validate events locally before configuring a log forwarder.
-
-> **Note:** PowerShell is not required to install or run Sysmon for Linux.
->
-> Requirements and behavior include:
->
-> - **Native package:** Install Sysmon for Linux using a supported package from
->   Microsoft's Linux software repository (for example, a `.deb` or `.rpm`).
-> - **Kernel support:** Sysmon for Linux uses the SysinternalsEBPF component and
->   eBPF capabilities, including BTF, to monitor system activity.
-> - **Logging:** Events are written to the host's system logging facility rather
->   than to the Windows Event Viewer. The exact destination depends on the
->   distribution and logging configuration; `/var/log/syslog` is one possible
->   destination.
->
-> Optional PowerShell modules can help parse or analyze Syslog events, but
-> PowerShell is not needed to run the Sysmon daemon.
-
-## Configuration and operations
-
-- To keep platform configurations separate under `windows/configs/`,
-obviously will find the windows conf and the linus part will be also under `linux/configs/`.
-- Record the configuration source, version or revision, and any local changes.
-  Review upstream updates before adopting them.
-- Prefer focused collection and explicit filters. Measure event volume and
-  review privacy implications before enabling high-volume event types.
-- Back up the currently deployed configuration and document a rollback path
-  before applying changes.
-- Verify host clock synchronization, event retention, and access controls. Do
-  not commit host-specific data, credentials, or collected event logs here.
+The individual events are observations. The sequence provides the investigative context.
 
 ---
 
-## Custom rules
+## 3. Install and verify Sysmon on Windows
 
-This section contains examples of custom Sysmon rules. Additional examples can
-be found under `sysmon/windows/custom`. Review and test each rule before
-deployment; Sysmon records activity but does not prevent it.
+There are currently two Windows deployment models worth knowing:
 
-> [!NOTE]
-> Reminder: In Event Viewer, find it under **Applications and Services Logs** >
-> **Microsoft** > **Windows** > **Sysmon** > **Operational**. On Windows hosts,
-> use this channel to validate any custom rule and confirm the resulting events.
+- **Windows 10:** standalone Sysinternals Sysmon remains the relevant approach.
+- **Windows 11:** Sysmon is also available as a built-in optional Windows feature starting in February 2026.
 
-### Monitor files created in Downloads
+Built-in Sysmon and standalone Sysmon are not meant to coexist on the same Windows installation. See Microsoft's current documentation before changing an existing installation.
 
-The following rule collects Sysmon Event ID 11 (`FileCreate`) when a file is
-created in a user's `Downloads` directory. Adjust the path condition if the
-environment uses a different download location.
+### 3.1 Standalone Sysmon — this lab
 
-```xml
+The lab Windows VM currently uses the standalone Sysinternals package.
+
+Run the following from an elevated PowerShell session:
+
+~~~powershell
+.\Sysmon64.exe -accepteula -i .\sysmonconfig.xml
+~~~
+
+The configuration file path should point to the reviewed configuration you actually deploy.
+
+### 3.2 Verify the service
+
+~~~powershell
+Get-Service Sysmon*
+~~~
+
+Then verify the event channel:
+
+~~~powershell
+Get-WinEvent -LogName 'Microsoft-Windows-Sysmon/Operational' -MaxEvents 10
+~~~
+
+Also check Event Viewer manually when troubleshooting.
+
+### 3.3 Lab installation note
+
+The Windows 10 lab VM was successfully tested with standalone Sysmon 15.22.
+
+Keep version-specific installation output in lab notes rather than treating one installed version as a permanent requirement for every deployment.
+
+---
+
+## 4. Sysmon configuration
+
+Sysmon configuration is written in XML.
+
+A configuration controls:
+
+- Which event types are collected
+- Which fields are filtered
+- Which activity is included or excluded
+- Hashing and other enrichment
+- Event volume and noise
+
+A simplified structure looks like:
+
+~~~xml
 <Sysmon schemaversion="4.90">
-	<EventFiltering>
-		<FileCreate onmatch="include">
-			<TargetFilename condition="contains">\Downloads\</TargetFilename>
-		</FileCreate>
-	</EventFiltering>
+    <HashAlgorithms>SHA256</HashAlgorithms>
+
+    <EventFiltering>
+
+        <ProcessCreate onmatch="include">
+            <!-- filtering conditions -->
+        </ProcessCreate>
+
+        <NetworkConnect onmatch="exclude">
+            <!-- exclusions -->
+        </NetworkConnect>
+
+    </EventFiltering>
 </Sysmon>
-```
+~~~
 
-Merge this rule into the existing configuration rather than replacing other
-production rules, then apply the reviewed configuration from an elevated
-PowerShell session:
+### 4.1 Include vs exclude
 
-```powershell
- .\Sysmon64.exe -c .\sysmonconfig.xml
-```
+The two basic modes are:
 
-Verify the resulting Event ID 11 events in the
-`Microsoft-Windows-Sysmon/Operational` channel. A broad `contains` match may
-include application data directories; use a user-specific `begin with` path
-when narrower collection is required.
+- <code>include</code> — log only matching events
+- <code>exclude</code> — log events except those matching the rule
 
-## Forwarding and analysis
+Microsoft's current documentation notes that exclusion rules take precedence over inclusion rules.
 
-Sysmon events are intended to complement other security telemetry and may be
-integrated with solutions such as Wazuh and the repository's ELK Stack. This
-repository does not currently configure Sysmon deployment or event forwarding.
-Before relying on an integration, verify that events arrive with timestamps and
-structured fields intact, that parsing is correct, and that retention and access
-controls meet the needs of the environment.
+Same-field rules and different-field rules also have specific evaluation behavior, so test the actual configuration rather than assuming the XML reads like ordinary boolean logic.
+
+### 4.2 Useful conditions
+
+Common conditions include:
+
+~~~
+is
+is not
+contains
+contains any
+contains all
+excludes
+excludes any
+excludes all
+begin with
+end with
+not begin with
+not end with
+less than
+more than
+image
+~~~
+
+The <code>image</code> condition is useful for image/path fields such as <code>Image</code>, <code>ParentImage</code>, <code>SourceImage</code>, and <code>TargetImage</code>.
+
+Example:
+
+~~~xml
+<ProcessCreate onmatch="include">
+    <Image condition="image">powershell.exe</Image>
+</ProcessCreate>
+~~~
+
+This is intended for image-path matching, rather than arbitrary text fields such as <code>CommandLine</code>.
+
+### 4.3 Configuration engineering
+
+Do not start by enabling everything blindly.
+
+A practical workflow is:
+
+~~~
+Start with high-value telemetry
+        │
+        ▼
+Measure event volume
+        │
+        ▼
+Inspect the events
+        │
+        ▼
+Identify useful signal / noise
+        │
+        ▼
+Tune filters
+        │
+        ▼
+Test again
+        │
+        ▼
+Document the configuration
+~~~
+
+For this homelab, every configuration should record:
+
+- Sysmon version
+- Schema version
+- Source/reference
+- Local modifications
+- Date tested
+- Host/platform tested on
+- Expected event volume
+- Rollback procedure
+
+Keep Windows configurations under:
+
+<code>security/telemetry/sysmon/windows/configs/</code>
 
 ---
 
-## Sysmon integrated with Wazuh
+## 5. Example: monitor files created in Downloads
 
-> [!WARNING]
-> This section assumes Wazuh is installed and UP&running.
+A small experiment is more useful than immediately deploying a huge configuration.
 
-Wazuh can collect and analyze Sysmon events, but it does not replace a
-carefully designed Sysmon configuration. Sysmon decides what activity is
-recorded; Wazuh then decodes those events and applies correlation, severity,
-and alerting. Configure both systems together and validate the entire path from
-Windows host to Wazuh manager before relying on an alert.
+The following rule collects Event ID 11 when a file is created under a path containing <code>\Downloads\</code>:
 
-For a practical walkthrough of using Sysmon for advanced Windows monitoring,
-see the [Wazuh-SIEM lab guide](https://github.com/azizyahyaoui/Wazuh-SIEM/blob/master/course/WazuhSIEM.md#use-sysmon-for-advanced-windows-monitoring).
-A matching example configuration is available in this repository at the
-[Wazuh Sysmon configuration](https://github.com/azizyahyaoui/HomeLab-stacks/blob/master/security/telemetry/sysmon/Wazuh/wazuh_sysmonconf.xml).
-Wazuh also maintains an example configuration in its
-[Sysmon configuration resource](https://wazuh.com/resources/blog/emulation-of-attack-techniques-and-detection-with-wazuh/sysmonconfig.xml).
+~~~xml
+<Sysmon schemaversion="4.90">
+    <EventFiltering>
+        <FileCreate onmatch="include">
+            <TargetFilename condition="contains">\\Downloads\\</TargetFilename>
+        </FileCreate>
+    </EventFiltering>
+</Sysmon>
+~~~
 
-#### Deployment guidance
+Apply the reviewed configuration:
 
-- Treat these configurations as reference material. Review every rule,
-  exclude known-good software, and test changes on representative hosts before
-  broad deployment.
-- Keep Sysmon collection focused on events that support investigation. High-
-  volume events, especially image-load and network telemetry, can increase
-  storage, processing, and alert noise.
-- Confirm that the Wazuh agent is collecting the Sysmon channel and that the
-  manager receives structured fields, including event ID, timestamp, host,
-  process image, command line, user, and hashes when available.
-- Tune Wazuh rules separately from Sysmon filters. A Sysmon exclusion prevents
-  the event from being collected; a Wazuh rule exclusion only changes downstream
-  analysis.
-- Document the configuration version, local changes, deployment scope, and
-  rollback procedure. Do not commit credentials or collected event data.
+~~~powershell
+.\Sysmon64.exe -c .\sysmonconfig.xml
+~~~
 
-After each change, generate safe test activity, verify the event in the
-Windows Sysmon Operational channel, confirm that it reaches Wazuh, and ensure
-that the resulting alert contains enough context for investigation.
+Then create a harmless test file in Downloads and verify Event ID 11:
 
----
+~~~powershell
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-Sysmon/Operational'
+    Id      = 11
+} -MaxEvents 10
+~~~
 
-## Sysmon integrated with ELK stack
+The goal of this experiment is to understand:
 
-TODO
+~~~
+Action
+  ↓
+Sysmon observes it
+  ↓
+Event ID 11
+  ↓
+Windows Event Log
+  ↓
+Later: Wazuh / ELK
+~~~
 
----
-
-## Hiding service and driver for sec purpose
-
-TODO
-[TrustedSec](https://youtu.be/MlGc44dfFBg?t=900)
-[TrustedSec](https://youtu.be/MlGc44dfFBg?t=1336)
-
-[Sysmon DarkOperator extension](https://marketplace.visualstudio.com/publishers/DarkOperator)
-
+This is telemetry validation, not detection by itself.
 
 ---
 
+## 6. Sysmon for Linux
 
-## More
+Sysmon also has a Linux implementation maintained by Microsoft.
 
-- Run `Sysmon64.exe` with no arguments to see the authoritative list for your installed version, since newer releases add or tweak a few switches.
+The Linux implementation is **not simply Windows Sysmon copied onto Linux**. Keep the platform-specific behavior and event model separate.
 
-**Core commands**
+Refer to the [Sysmon for Linux project](https://github.com/microsoft/SysmonForLinux) for:
 
-| Command | What it does |
-|---|---|
-| `-i [config.xml]` | Install the service and driver, optionally with a config |
-| `-c [config.xml]` | Update the config on a running install. With no file, it dumps the current config |
-| `-c --` | Reset to the default configuration |
-| `-u [force]` | Uninstall. `force` proceeds even if some components are missing |
-| `-m` | Install the event manifest (also done automatically on install) |
-| `-s [version\|all]` | Print the config schema (latest by default, `all` for every version) |
+- Supported distributions
+- Installation
+- Package requirements
+- Configuration syntax
+- Service management
+- Event output
+- Kernel/eBPF requirements
 
-**Options (install or config update)**
+Sysmon for Linux uses the SysinternalsEBPF component and Linux kernel eBPF capabilities. Events are written through the Linux system logging infrastructure rather than the Windows Event Viewer.
 
-| Option | What it does |
-|---|---|
-| `-accepteula` | Accept the license silently (needed for scripted installs) |
-| `-nologo` | Suppress the banner |
-| `-h <algs>` | Hash algorithms: `MD5`, `SHA1`, `SHA256`, `IMPHASH`, or `*` for all. Combine with commas or pipes, e.g. `-h sha256,imphash` |
-| `-n [procs]` | Log network connections, optionally only for the listed process names |
-| `-l [procs]` | Log image (module) loads, optionally only for the listed processes |
-| `-r` | Check signature certificate revocation |
-| `-d <name>` | Custom driver image name (default `SysmonDrv`), useful to avoid easy detection or name collisions |
+The exact log destination depends on the distribution and logging setup.
 
-**Examples**
+For this homelab, Linux configurations belong under:
 
-```powershell
-# Install with config and silent EULA
+<code>security/telemetry/sysmon/linux/configs/</code>
+
+Record the tested Linux distribution, kernel, Sysmon version, configuration revision, and log destination with each experiment.
+
+> **Important:** Do not reuse Windows Event ID assumptions for Linux. Treat Windows and Linux telemetry as separate platform implementations.
+
+---
+
+## 7. Configuration and operational practices
+
+### Keep configurations versioned
+
+Store reviewed configurations in the repository:
+
+~~~
+security/
+└── telemetry/
+    └── sysmon/
+        ├── windows/
+        │   └── configs/
+        └── linux/
+            └── configs/
+~~~
+
+Do not commit:
+
+- Credentials
+- Host-specific secrets
+- Private identifiers
+- Raw collected logs
+- Large generated event dumps
+
+### Before changing a deployed configuration
+
+1. Save the current configuration.
+2. Record the version/revision being tested.
+3. Apply the change.
+4. Verify Sysmon is running.
+5. Generate safe test activity.
+6. Verify the expected event locally.
+7. Measure event volume.
+8. Document the result.
+9. Keep a rollback path.
+
+### Useful management commands
+
+~~~powershell
+# Install
 Sysmon64.exe -accepteula -i sysmonconfig.xml
 
-# Install with command-line options only (no config file)
-Sysmon64.exe -accepteula -i -h sha256 -n -l
+# Update configuration
+Sysmon64.exe -c sysmonconfig.xml
 
-# Dump the running config
+# Dump current configuration
 Sysmon64.exe -c
 
-# Reset to defaults
+# Reset configuration
 Sysmon64.exe -c --
 
-# Print the schema for all versions
+# Show configuration schema
+Sysmon64.exe -s
+
+# Show all schema versions
 Sysmon64.exe -s all
-```
 
-**Sysmon event IDs**
+# Uninstall
+Sysmon64.exe -u
+~~~
 
-| ID | Event | ID | Event |
-|---|---|---|---|
-| 1 | Process create | 14 | Registry key/value rename |
-| 2 | File creation time changed | 15 | File stream (ADS) created |
-| 3 | Network connection | 16 | Sysmon config state changed |
-| 4 | Sysmon service state changed | 17 | Pipe created |
-| 5 | Process terminated | 18 | Pipe connected |
-| 6 | Driver loaded | 19 | WMI filter activity |
-| 7 | Image loaded | 20 | WMI consumer activity |
-| 8 | CreateRemoteThread | 21 | WMI consumer-to-filter binding |
-| 9 | RawAccessRead | 22 | DNS query |
-| 10 | Process access | 23 | File delete (archived) |
-| 11 | File create | 24 | Clipboard change |
-| 12 | Registry object create/delete | 25 | Process tampering |
-| 13 | Registry value set | 26 | File delete (logged only) |
-| | | 27 | File block executable |
-| | | 28 | File block shredding |
-| | | 29 | File executable detected |
-| | | 255 | Error |
-
-**Config rule conditions**
-
-`is`, `is not`, `contains`, `contains any`, `contains all`, `excludes`, `excludes any`, `excludes all`, `begin with`, `end with`, `not begin with`, `not end with`, `less than`, `more than`, `image` (matches the filename or full path of an image).
-
-Use `onmatch="include"` or `onmatch="exclude"` on each event filter, and `groupRelation="or"` or `"and"` on rule groups.
+Always check the command syntax supported by the installed Sysmon version.
 
 ---
 
-> **`image`** condition, one of the match operators you can use in a Sysmon config rule. Unlike `is` or `contains`, which compare the field text literally, `image` is built for process paths: it matches either the full path or just the filename.
+## 8. Sysmon and Wazuh
 
-So this rule:
+Wazuh is a downstream consumer of Sysmon telemetry.
 
-```xml
-<ProcessCreate onmatch="include">
-  <Image condition="image">powershell.exe</Image>
-</ProcessCreate>
-```
+The division of responsibility is:
 
-matches all of these:
+~~~
+Sysmon
+  │
+  │ records activity
+  ▼
+Windows Event Log
+  │
+  │ collected by Wazuh Agent
+  ▼
+Wazuh
+  │
+  ├── decoding
+  ├── rules
+  ├── correlation
+  ├── severity
+  └── alerts
+~~~
 
-- `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
-- `C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe`
-- Any other path ending in `powershell.exe`
+Keep the detailed Wazuh walkthrough in the separate [Wazuh-SIEM](https://github.com/azizyahyaoui/Wazuh-SIEM) repository.
 
-It's handy when you care about the binary regardless of where it runs from. It also saves you from writing `end with` and remembering the leading backslash, which avoids accidentally matching something like `notpowershell.exe`.
+The HomeLab-stacks repository should contain the **actual lab integration and deployment details**, while Wazuh-SIEM remains the Wazuh-focused learning material.
 
-Only use it on fields that hold image paths, such as `Image`, `ParentImage`, `SourceImage`, or `TargetImage`. It makes no sense on fields like `CommandLine` or `QueryName`.
+Current Wazuh/Sysmon reference material:
+
+- [Wazuh-SIEM — Advanced Windows monitoring with Sysmon](https://github.com/azizyahyaoui/Wazuh-SIEM/blob/master/course/WazuhSIEM.md#use-sysmon-for-advanced-windows-monitoring)
+- [Local Wazuh Sysmon configuration](./Wazuh/wazuh_sysmonconf.xml)
+- [Wazuh Sysmon configuration resource](https://wazuh.com/resources/blog/emulation-of-attack-techniques-and-detection-with-wazuh/sysmonconfig.xml)
+
+> Detailed Wazuh collection, decoder, rule, and alert configuration should eventually live under <code>security/integrations/wazuh/</code>, not inside this core Sysmon document.
+
+---
+
+## 9. Sysmon and ELK
+
+ELK is another downstream consumer of telemetry.
+
+The intended lab flow is:
+
+~~~
+Windows VM
+   │
+   └── Sysmon
+        │
+        ▼
+   Event collection
+        │
+        ▼
+   Elasticsearch
+        │
+        ▼
+      Kibana
+~~~
+
+Detailed ELK ingestion, parsing, index design, and dashboards should live under the ELK/integration documentation rather than becoming part of the core Sysmon reference.
+
+**Status:** Integration not yet configured.
+
+---
+
+## 10. Homelab workflow
+
+The long-term goal is:
+
+~~~
+┌─────────────────┐
+│   Windows VM    │
+│  test activity  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│      Sysmon     │
+│    telemetry    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Windows Event   │
+│      Log        │
+└────────┬────────┘
+         │
+     ┌───┴────┐
+     ▼        ▼
+  Wazuh       ELK
+     │        │
+     ▼        ▼
+Detection   Hunting /
+& alerts    visualization
+~~~
+
+The practical learning loop is:
+
+~~~
+Activity
+   ↓
+Telemetry
+   ↓
+Detection
+   ↓
+Investigation
+   ↓
+Tuning
+   ↓
+Repeat
+~~~
+
+This keeps Sysmon in its proper role: **collect useful host telemetry so the rest of the security stack has something meaningful to analyze.**
+
+---
+
+## 11. Next experiments
+
+Planned Sysmon experiments for the homelab:
+
+- [ ] Process creation — Event ID 1
+- [ ] Network connection — Event ID 3
+- [ ] DNS query — Event ID 22
+- [ ] File creation — Event ID 11
+- [ ] Registry activity — Event IDs 12–14
+- [ ] Process access — Event ID 10
+- [ ] Process tampering — Event ID 25
+- [ ] Named pipes — Event IDs 17–18
+- [ ] WMI activity — Event IDs 19–21
+- [ ] Linux Sysmon telemetry
+- [ ] Sysmon → Wazuh collection
+- [ ] Sysmon → ELK ingestion
+- [ ] Attack → Telemetry → Detection → Visualization
+
+---
+
+## References
+
+- [Microsoft Sysmon](https://learn.microsoft.com/sysinternals/downloads/sysmon)
+- [Sysmon Overview](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/overview)
+- [Enable and configure Sysmon](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/how-to-enable-sysmon)
+- [Sysmon configuration files](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/sysmon-configuration-files)
+- [Sysmon events](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/sysmon-events)
+- [Sysmon for Linux](https://github.com/microsoft/SysmonForLinux)
