@@ -62,7 +62,7 @@ Sysmon records observations. Another system can then interpret those observation
 
 For example:
 
-~~~
+```
 Windows activity
       │
       ▼
@@ -74,7 +74,7 @@ Windows Event Log
       ├──────────► Wazuh ──────► Detection / Alerting
       │
       └──────────► ELK ────────► Search / Investigation / Visualization
-~~~
+```
 
 A useful mental model for this lab:
 
@@ -96,13 +96,13 @@ Sysmon for Windows writes events to:
 
 In Event Viewer:
 
-~~~
+```
 Applications and Services Logs
 └── Microsoft
     └── Windows
         └── Sysmon
             └── Operational
-~~~
+```
 
 The underlying Windows Event Log files are stored under:
 
@@ -110,10 +110,10 @@ The underlying Windows Event Log files are stored under:
 
 From PowerShell:
 
-~~~powershell
+```powershell
 Get-WinEvent -LogName 'Microsoft-Windows-Sysmon/Operational' -MaxEvents 20 |
     Select-Object TimeCreated, Id, ProviderName, Message
-~~~
+```
 
 When collecting Sysmon centrally, prefer the structured event fields rather than relying only on the rendered message.
 
@@ -149,7 +149,7 @@ For the complete and version-specific event reference, use Microsoft's [Sysmon e
 
 Sysmon becomes more useful when events are correlated into a timeline.
 
-~~~
+```
 User opens document
       │
       ▼
@@ -166,7 +166,7 @@ Event 11 — File Create
       │
       ▼
 Event 12–14 — Registry activity
-~~~
+```
 
 The individual events are observations. The sequence provides the investigative context.
 
@@ -187,23 +187,23 @@ The lab Windows VM currently uses the standalone Sysinternals package.
 
 Run the following from an elevated PowerShell session:
 
-~~~powershell
+```powershell
 .\Sysmon64.exe -accepteula -i .\sysmonconfig.xml
-~~~
+```
 
 The configuration file path should point to the reviewed configuration you actually deploy.
 
 ### 3.2 Verify the service
 
-~~~powershell
+```powershell
 Get-Service Sysmon*
-~~~
+```
 
 Then verify the event channel:
 
-~~~powershell
+```powershell
 Get-WinEvent -LogName 'Microsoft-Windows-Sysmon/Operational' -MaxEvents 10
-~~~
+```
 
 Also check Event Viewer manually when troubleshooting.
 
@@ -229,7 +229,7 @@ A configuration controls:
 
 A simplified structure looks like:
 
-~~~xml
+```xml
 <Sysmon schemaversion="4.90">
     <HashAlgorithms>SHA256</HashAlgorithms>
 
@@ -245,7 +245,7 @@ A simplified structure looks like:
 
     </EventFiltering>
 </Sysmon>
-~~~
+```
 
 ### 4.1 Include vs exclude
 
@@ -262,7 +262,7 @@ Same-field rules and different-field rules also have specific evaluation behavio
 
 Common conditions include:
 
-~~~
+```
 is
 is not
 contains
@@ -278,17 +278,17 @@ not end with
 less than
 more than
 image
-~~~
+```
 
 The <code>image</code> condition is useful for image/path fields such as <code>Image</code>, <code>ParentImage</code>, <code>SourceImage</code>, and <code>TargetImage</code>.
 
 Example:
 
-~~~xml
+```xml
 <ProcessCreate onmatch="include">
     <Image condition="image">powershell.exe</Image>
 </ProcessCreate>
-~~~
+```
 
 This is intended for image-path matching, rather than arbitrary text fields such as <code>CommandLine</code>.
 
@@ -298,7 +298,7 @@ Do not start by enabling everything blindly.
 
 A practical workflow is:
 
-~~~
+```
 Start with high-value telemetry
         │
         ▼
@@ -318,7 +318,7 @@ Test again
         │
         ▼
 Document the configuration
-~~~
+```
 
 For this homelab, every configuration should record:
 
@@ -343,7 +343,7 @@ A small experiment is more useful than immediately deploying a huge configuratio
 
 The following rule collects Event ID 11 when a file is created under a path containing <code>\Downloads\</code>:
 
-~~~xml
+```xml
 <Sysmon schemaversion="4.90">
     <EventFiltering>
         <FileCreate onmatch="include">
@@ -351,26 +351,26 @@ The following rule collects Event ID 11 when a file is created under a path cont
         </FileCreate>
     </EventFiltering>
 </Sysmon>
-~~~
+```
 
 Apply the reviewed configuration:
 
-~~~powershell
+```powershell
 .\Sysmon64.exe -c .\sysmonconfig.xml
-~~~
+```
 
 Then create a harmless test file in Downloads and verify Event ID 11:
 
-~~~powershell
+```powershell
 Get-WinEvent -FilterHashtable @{
     LogName = 'Microsoft-Windows-Sysmon/Operational'
     Id      = 11
 } -MaxEvents 10
-~~~
+```
 
 The goal of this experiment is to understand:
 
-~~~
+```
 Action
   ↓
 Sysmon observes it
@@ -380,7 +380,7 @@ Event ID 11
 Windows Event Log
   ↓
 Later: Wazuh / ELK
-~~~
+```
 
 This is telemetry validation, not detection by itself.
 
@@ -422,7 +422,7 @@ Record the tested Linux distribution, kernel, Sysmon version, configuration revi
 
 Store reviewed configurations in the repository:
 
-~~~
+```
 security/
 └── telemetry/
     └── sysmon/
@@ -430,7 +430,7 @@ security/
         │   └── configs/
         └── linux/
             └── configs/
-~~~
+```
 
 Do not commit:
 
@@ -454,7 +454,7 @@ Do not commit:
 
 ### Useful management commands
 
-~~~powershell
+```powershell
 # Install
 Sysmon64.exe -accepteula -i sysmonconfig.xml
 
@@ -475,7 +475,7 @@ Sysmon64.exe -s all
 
 # Uninstall
 Sysmon64.exe -u
-~~~
+```
 
 Always check the command syntax supported by the installed Sysmon version.
 
@@ -487,7 +487,7 @@ Wazuh is a downstream consumer of Sysmon telemetry.
 
 The division of responsibility is:
 
-~~~
+```
 Sysmon
   │
   │ records activity
@@ -503,7 +503,7 @@ Wazuh
   ├── correlation
   ├── severity
   └── alerts
-~~~
+```
 
 Keep the detailed Wazuh walkthrough in the separate [Wazuh-SIEM](https://github.com/azizyahyaoui/Wazuh-SIEM) repository.
 
@@ -525,7 +525,7 @@ ELK is another downstream consumer of telemetry.
 
 The intended lab flow is:
 
-~~~
+```
 Windows VM
    │
    └── Sysmon
@@ -538,7 +538,7 @@ Windows VM
         │
         ▼
       Kibana
-~~~
+```
 
 Detailed ELK ingestion, parsing, index design, and dashboards should live under the ELK/integration documentation rather than becoming part of the core Sysmon reference.
 
@@ -550,7 +550,7 @@ Detailed ELK ingestion, parsing, index design, and dashboards should live under 
 
 The long-term goal is:
 
-~~~
+```
 ┌─────────────────┐
 │   Windows VM    │
 │  test activity  │
@@ -575,11 +575,11 @@ The long-term goal is:
      ▼        ▼
 Detection   Hunting /
 & alerts    visualization
-~~~
+```
 
 The practical learning loop is:
 
-~~~
+```
 Activity
    ↓
 Telemetry
@@ -591,7 +591,7 @@ Investigation
 Tuning
    ↓
 Repeat
-~~~
+```
 
 This keeps Sysmon in its proper role: **collect useful host telemetry so the rest of the security stack has something meaningful to analyze.**
 
