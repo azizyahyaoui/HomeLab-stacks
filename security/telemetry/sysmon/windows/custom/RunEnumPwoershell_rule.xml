@@ -1,0 +1,67 @@
+<Sysmon schemaversion="4.90">
+  <HashAlgorithms>sha256</HashAlgorithms>
+  <EventFiltering>
+
+    <RuleGroup name="RunEnumPowershell_rule" groupRelation="or">
+      <ProcessCreate onmatch="include">
+
+        <!-- User / identity discovery -->
+        <Rule name="Enum-Identity" groupRelation="or">
+          <Image condition="image">whoami.exe</Image>
+          <Image condition="image">quser.exe</Image>
+          <Image condition="image">klist.exe</Image>
+          <CommandLine condition="contains any">net user;net1 user;net localgroup;net group;query user;cmdkey /list</CommandLine>
+        </Rule>
+
+        <!-- Network config discovery -->
+        <Rule name="Enum-NetworkConfig" groupRelation="or">
+          <Image condition="image">ipconfig.exe</Image>
+          <Image condition="image">arp.exe</Image>
+          <Image condition="image">route.exe</Image>
+          <Image condition="image">nslookup.exe</Image>
+          <Image condition="image">getmac.exe</Image>
+          <Image condition="image">nbtstat.exe</Image>
+        </Rule>
+
+        <!-- Open ports / connections / sessions -->
+        <Rule name="Enum-OpenPorts" groupRelation="or">
+          <Image condition="image">netstat.exe</Image>
+          <Image condition="image">nmap.exe</Image>
+          <Image condition="image">tracert.exe</Image>
+          <CommandLine condition="contains any">net use;net session;net view;net share;net1 view</CommandLine>
+          <CommandLine condition="contains any">Get-NetTCPConnection;Test-NetConnection;Get-NetUDPEndpoint;TcpClient;Net.Sockets.TcpClient</CommandLine>
+        </Rule>
+
+        <!-- Firewall discovery -->
+        <Rule name="Enum-Firewall" groupRelation="or">
+          <CommandLine condition="contains any">netsh advfirewall;netsh firewall;netsh wlan show;Get-NetFirewallRule;Get-NetFirewallProfile;Get-NetFirewallPortFilter</CommandLine>
+          <CommandLine condition="contains all">sc;query;mpssvc</CommandLine>
+        </Rule>
+
+        <!-- Security product / system discovery -->
+        <Rule name="Enum-System" groupRelation="or">
+          <Image condition="image">systeminfo.exe</Image>
+          <Image condition="image">hostname.exe</Image>
+          <Image condition="image">tasklist.exe</Image>
+          <CommandLine condition="contains any">wmic product;wmic qfe;wmic process;wmic service;wmic useraccount;wmic /namespace:\\root\SecurityCenter2</CommandLine>
+          <CommandLine condition="contains any">Get-MpComputerStatus;Get-MpPreference;Get-HotFix;Get-Process;Get-Service;Get-WmiObject;Get-CimInstance</CommandLine>
+        </Rule>
+
+        <!-- Active Directory discovery -->
+        <Rule name="Enum-ActiveDirectory" groupRelation="or">
+          <Image condition="image">nltest.exe</Image>
+          <Image condition="image">dsquery.exe</Image>
+          <CommandLine condition="contains any">Get-ADUser;Get-ADGroup;Get-ADComputer;Get-ADDomain;net group "domain admins";nltest /dclist;nltest /domain_trusts</CommandLine>
+        </Rule>
+
+        <!-- Enumeration spawned from a scripting shell (higher signal) -->
+        <Rule name="Enum-From-Shell" groupRelation="and">
+          <ParentImage condition="image">powershell.exe</ParentImage>
+          <Image condition="contains any">whoami.exe;ipconfig.exe;netstat.exe;systeminfo.exe;net.exe;net1.exe;tasklist.exe;nltest.exe</Image>
+        </Rule>
+
+      </ProcessCreate>
+    </RuleGroup>
+
+  </EventFiltering>
+</Sysmon>
