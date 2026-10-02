@@ -1,0 +1,58 @@
+<Sysmon schemaversion="4.90">
+  <HashAlgorithms>sha256</HashAlgorithms>
+  <EventFiltering>
+
+    <!-- EID 12/13: USB device first seen / mounted -->
+    <RuleGroup name="USB-Registry" groupRelation="or">
+      <RegistryEvent onmatch="include">
+        <TargetObject name="USB device enumerated" condition="contains">\Enum\USBSTOR\</TargetObject>
+        <TargetObject name="USB device enumerated (USB)" condition="contains">\Enum\USB\</TargetObject>
+        <TargetObject name="Drive letter assigned" condition="contains">\MountedDevices\</TargetObject>
+        <TargetObject name="Explorer mount point" condition="contains">\Explorer\MountPoints2\</TargetObject>
+        <TargetObject name="Portable device" condition="contains">\Windows Portable Devices\Devices\</TargetObject>
+      </RegistryEvent>
+    </RuleGroup>
+
+    <!-- EID 11: files created on any non-C: drive (copy/move TO a USB, or extracted there) -->
+    <RuleGroup name="USB-FileCreate" groupRelation="or">
+      <FileCreate onmatch="include">
+        <TargetFilename name="File created off system drive" condition="not begin with">C:\</TargetFilename>
+      </FileCreate>
+    </RuleGroup>
+
+    <!-- EID 26: files deleted on non-C: drives (the source side of a MOVE from a USB) -->
+    <RuleGroup name="USB-FileDelete" groupRelation="or">
+      <FileDeleteDetected onmatch="include">
+        <TargetFilename name="File deleted off system drive" condition="not begin with">C:\</TargetFilename>
+      </FileDeleteDetected>
+    </RuleGroup>
+
+    <!-- EID 1: copy/move commands that reference another drive letter -->
+    <RuleGroup name="USB-Commands" groupRelation="or">
+      <ProcessCreate onmatch="include">
+        <Rule name="cmd copy tools" groupRelation="and">
+          <Image condition="image">robocopy.exe</Image>
+        </Rule>
+        <Rule name="xcopy" groupRelation="and">
+          <Image condition="image">xcopy.exe</Image>
+        </Rule>
+        <Rule name="PowerShell file ops" groupRelation="and">
+          <Image condition="image">powershell.exe</Image>
+          <CommandLine condition="contains any">Copy-Item;Move-Item;copy ;move ;cp ;mv </CommandLine>
+        </Rule>
+        <Rule name="cmd copy/move" groupRelation="and">
+          <Image condition="image">cmd.exe</Image>
+          <CommandLine condition="contains any">copy ;move ;xcopy;robocopy</CommandLine>
+        </Rule>
+      </ProcessCreate>
+    </RuleGroup>
+
+    <!-- EID 15: Mark-of-the-Web / ADS on files landing on other drives -->
+    <RuleGroup name="USB-ADS" groupRelation="or">
+      <FileCreateStreamHash onmatch="include">
+        <TargetFilename condition="not begin with">C:\</TargetFilename>
+      </FileCreateStreamHash>
+    </RuleGroup>
+
+  </EventFiltering>
+</Sysmon>
