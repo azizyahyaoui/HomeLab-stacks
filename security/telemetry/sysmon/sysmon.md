@@ -341,7 +341,7 @@ Keep Windows configurations under:
 
 A small experiment is more useful than immediately deploying a huge configuration.
 
-The following rule collects Event ID 11 when a file is created under a path containing <code>\Downloads\</code>:
+The following rule collects Event ID 11 when a file is created under a path containing <code>Downloads</code> folder:
 
 ```xml
 <Sysmon schemaversion="4.90">
