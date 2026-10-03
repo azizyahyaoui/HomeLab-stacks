@@ -416,6 +416,104 @@ Record the tested Linux distribution, kernel, Sysmon version, configuration revi
 
 ---
 
+## Additional practical reference
+
+Run `Sysmon64.exe` with no arguments to see the authoritative list for your installed version, since newer releases add or tweak a few switches.
+
+### Core commands
+
+| Command | What it does |
+|---|---|
+| `-i [config.xml]` | Install the service and driver, optionally with a config |
+| `-c [config.xml]` | Update the config on a running install. With no file, it dumps the current config |
+| `-c --` | Reset to the default configuration |
+| `-u [force]` | Uninstall. `force` proceeds even if some components are missing |
+| `-m` | Install the event manifest (also done automatically on install) |
+| `-s [version\|all]` | Print the config schema (latest by default, `all` for every version) |
+
+### Options (install or config update)
+
+| Option | What it does |
+|---|---|
+| `-accepteula` | Accept the license silently (needed for scripted installs) |
+| `-nologo` | Suppress the banner |
+| `-h <algs>` | Hash algorithms: `MD5`, `SHA1`, `SHA256`, `IMPHASH`, or `*` for all. Combine with commas or pipes, e.g. `-h sha256,imphash` |
+| `-n [procs]` | Log network connections, optionally only for the listed process names |
+| `-l [procs]` | Log image (module) loads, optionally only for the listed processes |
+| `-r` | Check signature certificate revocation |
+| `-d <name>` | Custom driver image name (default `SysmonDrv`), useful to avoid easy detection or name collisions |
+
+### Examples
+
+```powershell
+# Install with config and silent EULA
+Sysmon64.exe -accepteula -i sysmonconfig.xml
+
+# Install with command-line options only (no config file)
+Sysmon64.exe -accepteula -i -h sha256 -n -l
+
+# Dump the running config
+Sysmon64.exe -c
+
+# Reset to defaults
+Sysmon64.exe -c --
+
+# Print the schema for all versions
+Sysmon64.exe -s all
+```
+
+### Sysmon event IDs
+
+| ID | Event | ID | Event |
+|---|---|---|---|
+| 1 | Process create | 14 | Registry key/value rename |
+| 2 | File creation time changed | 15 | File stream (ADS) created |
+| 3 | Network connection | 16 | Sysmon config state changed |
+| 4 | Sysmon service state changed | 17 | Pipe created |
+| 5 | Process terminated | 18 | Pipe connected |
+| 6 | Driver loaded | 19 | WMI filter activity |
+| 7 | Image loaded | 20 | WMI consumer activity |
+| 8 | CreateRemoteThread | 21 | WMI consumer-to-filter binding |
+| 9 | RawAccessRead | 22 | DNS query |
+| 10 | Process access | 23 | File delete (archived) |
+| 11 | File create | 24 | Clipboard change |
+| 12 | Registry object create/delete | 25 | Process tampering |
+| 13 | Registry value set | 26 | File delete (logged only) |
+| | | 27 | File block executable |
+| | | 28 | File block shredding |
+| | | 29 | File executable detected |
+| | | 255 | Error |
+
+### Config rule conditions
+
+`is`, `is not`, `contains`, `contains any`, `contains all`, `excludes`, `excludes any`, `excludes all`, `begin with`, `end with`, `not begin with`, `not end with`, `less than`, `more than`, `image` (matches the filename or full path of an image).
+
+Use `onmatch="include"` or `onmatch="exclude"` on each event filter, and `groupRelation="or"` or `"and"` on rule groups.
+
+> `image` is one of the match operators for Sysmon config rules. Unlike `is` or `contains`, which compare the field text literally, `image` is built for process paths and matches either the full path or the filename.
+>
+> This rule:
+>
+> ```xml
+> <ProcessCreate onmatch="include">
+>   <Image condition="image">powershell.exe</Image>
+> </ProcessCreate>
+> ```
+>
+> matches all of these:
+>
+> - `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
+> - `C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe`
+> - Any other path ending in `powershell.exe`
+>
+> It is useful when you care about a binary regardless of where it runs from, but it should only be used on fields that hold image paths such as `Image`, `ParentImage`, `SourceImage`, or `TargetImage`.
+
+### Service and driver naming note
+
+Some operators custom-name the Sysmon driver to make it harder to identify at a glance or to avoid naming collisions. The `-d <name>` switch controls the driver image name, but this is a trade-off and not a substitute for layered security controls or proper host monitoring.
+
+---
+
 ## 7. Configuration and operational practices
 
 ### Keep configurations versioned
