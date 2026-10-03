@@ -347,7 +347,7 @@ The following rule collects Event ID 11 when a file is created under a path cont
 <Sysmon schemaversion="4.90">
     <EventFiltering>
         <FileCreate onmatch="include">
-            <TargetFilename condition="contains">\\Downloads\\</TargetFilename>
+            <TargetFilename condition="contains">\Downloads\</TargetFilename>
         </FileCreate>
     </EventFiltering>
 </Sysmon>
