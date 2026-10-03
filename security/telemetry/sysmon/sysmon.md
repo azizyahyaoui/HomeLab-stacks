@@ -575,6 +575,27 @@ Sysmon64.exe -s all
 Sysmon64.exe -u
 ```
 
+The following examples show how to apply or refine Sysmon behavior using command-line options. The exact syntax can vary slightly by Sysmon version, so verify the installed binary before relying on a specific switch.
+
+```powershell
+# Hash all loaded images or files for easier tracking and hunting
+.\Sysmon.exe -c -h *
+
+# Apply logging or filtering for a specific binary
+.\Sysmon.exe -c -l malicious.exe
+
+# Exclude or suppress events for a specific binary
+.\Sysmon.exe -c -n malicious.exe
+
+# Focus on a sensitive process such as LSASS for credential-related telemetry
+.\Sysmon.exe -c -k lsass.exe
+```
+
+- `-h` is useful when you want to capture hashing information for artifacts as they are seen.
+- `-l` is commonly used to limit visibility to a target process or file of interest.
+- `-n` can be used to narrow or suppress telemetry for a known noisy or undesired binary.
+- `-k` is often used in investigations involving LSASS, since credential access and process memory activity are high-value events.
+
 Always check the command syntax supported by the installed Sysmon version.
 
 ---

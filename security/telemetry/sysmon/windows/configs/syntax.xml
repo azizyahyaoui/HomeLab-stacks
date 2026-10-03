@@ -1,0 +1,29 @@
+<!--
+The root element <Sysmon>, and for schemaversion="4.83" run sysmon -s 
+-->
+<Sysmon schemaversion="4.83">
+    <!-- Specify Hashing Algorithm; SHA1, SHA256, Imphash or * for all -->
+    <HashAlgorithms>sha256</HashAlgorithms>
+    <!-- Check if certificate used for signing has been revoked. -->
+    <CheckRevocation />
+    <!-- Name of directory where to archive files. -->
+    <ArchiveDirectory>sysmon</ArchiveDirectory>
+    <!-- Size of fields for Sysmon on Linux -->
+    <FieldSizes>CommandLine:50, Image: 50</FieldSizes>
+    <!-- Perform DNS Lookup for network connection events. -->
+    <DnsLookup>true | false</DnsLookup>
+    <EventFiltering>
+        <RuleGroup name="Process Create" groupRelation="or">
+            <Rule name="ProcessCreate">
+                <CommandLine condition="contains any">powershell.exe, cmd.exe</CommandLine>
+            </Rule>
+        </RuleGroup>
+        <!--Compound rule-->
+        <RuleGroup name="Process Create" groupRelation="or|and">
+            <Rule name="ProcessCreate">
+                <CommandLine condition="contains any">powershell.exe, cmd.exe</CommandLine>
+                <ParentImage condition="is any">C:\Windows\System32\services.exe, C:\Windows\System32\svchost.exe</ParentImage>
+            </Rule>
+        </RuleGroup>
+    </EventFiltering>
+</Sysmon>
