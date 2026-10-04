@@ -336,32 +336,3 @@ PS C: \Users\administrator> Get-SysmonNetworkConnect | select image, destination
 PS C: Windows system32> Get-SysmonDriverLoadEvent | select -First 1
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-How to emerge multi rules together.
