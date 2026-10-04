@@ -16,10 +16,10 @@ It is particularly useful for:
 
 ## Installing PSGumshoe
 
-Before installing a PowerShell module, the execution policy may need to allow local scripts. In many lab and restricted environments, you must explicitly allow scripts for the current user.
+PSGumshoe is installed from the PowerShell Gallery. Start by checking the current execution policy rather than changing it automatically:
 
 ```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+Get-ExecutionPolicy -List
 ```
 
 Then install the module:
@@ -28,11 +28,23 @@ Then install the module:
 Install-Module -Name PSGumshoe
 ```
 
-Why this matters:
+### If PSGumshoe will not run
 
-- `Set-ExecutionPolicy` prevents PowerShell from blocking script-based module installation.
-- `RemoteSigned` allows locally created scripts to run while still requiring downloaded scripts to be signed by a trusted publisher.
-- This is a common prerequisite in Windows-based security labs.
+On a lab machine, you may encounter an execution-policy error when PowerShell tries to load module scripts. If that happens, change the policy for **your current user only**:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+Then retry importing or using the module.
+
+Verify the effective policy afterward:
+
+```powershell
+Get-ExecutionPolicy -List
+```
+
+`RemoteSigned` is a reasonable lab setting because it allows locally created scripts while requiring downloaded scripts to be signed, unless they have been unblocked. Avoid changing the `LocalMachine` policy just to get PSGumshoe working.
 
 ---
 
