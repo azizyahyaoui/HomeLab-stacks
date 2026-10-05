@@ -287,7 +287,65 @@ Microsoft's current documentation notes that exclusion rules take precedence ove
 
 Same-field rules and different-field rules also have specific evaluation behavior, so test the actual configuration rather than assuming the XML reads like ordinary boolean logic.
 
-### 4.2 Useful conditions
+### 4.2 Rule order and `RuleName`
+
+Rule order matters, but it is not a general first-match rule for deciding whether Sysmon logs an event. Event filters determine inclusion or exclusion; an exclusion takes precedence over an inclusion even if the include appears first.
+
+| Filter situation | Result |
+|---|---|
+| An event matches an `include` rule and no `exclude` rule | Logged |
+| An event matches both an `include` rule and an `exclude` rule | Not logged; the exclusion wins |
+| An `include` filter exists, but the event matches none of its rules | Not logged |
+| Only an `exclude` filter exists, and the event matches none of its rules | Logged |
+
+Reordering `RuleGroup` blocks or event types does not change those include/exclude outcomes. However, when an event matches multiple include rules, rule evaluation can affect the rule label reported in the event's `RuleName` field. This label is useful when filtering or investigating events in a SIEM.
+
+For predictable labels, use named `<Rule>` elements for rules whose attribution matters, and put specific detection rules before a broad capture rule. Do not rely on an assumed ordering for bare conditions that are not wrapped in `<Rule>` elements; their evaluation and attribution may be determined by Sysmon's schema and implementation. Confirm the result with the Sysmon version you deploy.
+
+#### Example: specific pipe detections before a capture rule
+
+This fragment illustrates an include filter with named rules, followed by a separate exclude filter. The pipe names are examples, not definitive indicators of compromise. The capture rule is illustrative; validate its matching behavior and `RuleName` attribution on a test host before deploying it.
+
+```xml
+<EventFiltering>
+  <RuleGroup name="Pipe include rules" groupRelation="or">
+    <PipeEvent onmatch="include">
+      <Rule name="Possible-Cobalt-Strike-SMB-pipe" groupRelation="and">
+        <PipeName condition="begin with">\msse-</PipeName>
+        <PipeName condition="end with">-server</PipeName>
+      </Rule>
+      <Rule name="Possible-Cobalt-Strike-postex-pipe" groupRelation="and">
+        <PipeName condition="begin with">\postex_</PipeName>
+      </Rule>
+      <Rule name="capture-all" groupRelation="or">
+        <PipeName condition="begin with">\</PipeName>
+      </Rule>
+    </PipeEvent>
+  </RuleGroup>
+
+  <RuleGroup name="Known-good pipe exclusions" groupRelation="or">
+    <PipeEvent onmatch="exclude">
+      <PipeName condition="is">\ExampleVendor\ExpectedService</PipeName>
+    </PipeEvent>
+  </RuleGroup>
+</EventFiltering>
+```
+
+The exclusion value is a placeholder: replace it with a narrowly scoped, verified known-good pipe name from your environment, or remove the exclusion group if you have none. The intended pattern is to put specific, named detections before the capture rule so the event can receive a useful label, while using narrowly scoped exclusions to reduce known-good noise. Since exclusions win, an event matching an exclusion is dropped even if it also matches the capture rule. A broad capture rule can substantially increase event volume; measure and tune it before deployment.
+
+#### Verify ordering on the deployed version
+
+On a test host, generate an event that matches both a specific named rule and the capture rule, apply the configuration, and inspect the resulting event's `RuleName`. Then reverse the rule order, reapply, and compare the result. This confirms actual attribution behavior without assuming it is identical across all Sysmon versions or configurations.
+
+For rule condition combinations, use `<Rule groupRelation="and">` or `<Rule groupRelation="or">` to make the intended relationship explicit, and test the resulting filter behavior.
+
+Further reading:
+
+- [Microsoft Sysmon documentation](https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon)
+- Carlos Perez (TrustedSec), [Learning Sysmon video series](https://trustedsec.com/research/learning-sysmon-video-series) — videos on rule/filter order and named pipes
+- [Sysmon Modular](https://github.com/olafhartong/sysmon-modular)
+
+### 4.3 Useful conditions
 
 Common conditions include:
 
@@ -321,7 +379,7 @@ Example:
 
 This is intended for image-path matching, rather than arbitrary text fields such as <code>CommandLine</code>.
 
-### 4.3 Configuration engineering
+### 4.4 Configuration engineering
 
 Do not start by enabling everything blindly.
 
