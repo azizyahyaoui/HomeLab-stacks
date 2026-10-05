@@ -247,6 +247,35 @@ A simplified structure looks like:
 </Sysmon>
 ```
 
+The following starter configuration includes process creation, network connections, and named-pipe events:
+
+```xml
+<Sysmon schemaversion="4.91">
+  <HashAlgorithms>sha256</HashAlgorithms>
+  <EventFiltering>
+
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="include">
+        <!-- EID 1 rules -->
+      </ProcessCreate>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="include">
+        <!-- EID 3 rules -->
+      </NetworkConnect>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <PipeEvent onmatch="include">
+        <!-- EID 17/18 rules -->
+      </PipeEvent>
+    </RuleGroup>
+
+  </EventFiltering>
+</Sysmon>
+```
+
 ### 4.1 Include vs exclude
 
 The two basic modes are:
