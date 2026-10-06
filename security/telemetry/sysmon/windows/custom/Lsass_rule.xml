@@ -1,0 +1,132 @@
+<Sysmon schemaversion="4.90">
+    <HashAlgorithms>sha256</HashAlgorithms>
+    <EventFiltering>
+
+        <!-- EID 10: access to lsass, filtered by access mask and call trace -->
+        <RuleGroup name="LSASS_Access_Include" groupRelation="or">
+            <ProcessAccess onmatch="include">
+
+                <!-- Access masks that allow reading memory / full access -->
+                <Rule name="LSASS-MemoryRead-Mask" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <GrantedAccess condition="contains any">
+                        0x1010;0x1410;0x1438;0x143a;0x1f0fff;0x1f1fff;0x1f2fff;0x1f3fff;0x1fffff</GrantedAccess>
+                </Rule>
+
+                <!-- Dumping libraries in the call stack -->
+                <Rule name="LSASS-Dump-CallTrace" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <CallTrace condition="contains any">dbghelp.dll;dbgcore.dll;comsvcs.dll</CallTrace>
+                </Rule>
+
+                <!-- Unbacked memory in the call stack: shellcode / reflective loaders -->
+                <Rule name="LSASS-UNKNOWN-CallTrace" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <CallTrace condition="contains">UNKNOWN</CallTrace>
+                </Rule>
+
+                <!-- Access from user-writable locations -->
+                <Rule name="LSASS-From-UserPath" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <SourceImage condition="contains any">
+                        \Temp\;\AppData\;\Users\Public\;\Downloads\;\ProgramData\</SourceImage>
+                </Rule>
+
+                <!-- Task Manager / procdump / rundll32 touching lsass -->
+                <Rule name="LSASS-Known-Dump-Tools" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <SourceImage condition="image">taskmgr.exe</SourceImage>
+                </Rule>
+                <Rule name="LSASS-Known-Dump-Tools2" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <SourceImage condition="contains any">procdump;rundll32.exe;mimikatz;sqldumper</SourceImage>
+                </Rule>
+
+            </ProcessAccess>
+        </RuleGroup>
+
+        <!-- EID 10 noise reduction. Exclude wins over include. Baseline before enabling. -->
+        <RuleGroup name="LSASS_Access_Exclude" groupRelation="or">
+            <ProcessAccess onmatch="exclude">
+                <!-- Query-only access masks, very common and low risk -->
+                <Rule name="" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <GrantedAccess condition="is">0x1000</GrantedAccess>
+                </Rule>
+                <!-- Core Windows components that legitimately touch lsass -->
+                <Rule name="" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <SourceImage condition="is">C:\Windows\System32\wininit.exe</SourceImage>
+                </Rule>
+                <Rule name="" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <SourceImage condition="is">C:\Windows\System32\csrss.exe</SourceImage>
+                </Rule>
+                <Rule name="" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <SourceImage condition="is">C:\Windows\System32\services.exe</SourceImage>
+                </Rule>
+                <!-- Defender (path-pinned so a renamed binary elsewhere isn't excluded) -->
+                <Rule name="" groupRelation="and">
+                    <TargetImage condition="image">lsass.exe</TargetImage>
+                    <SourceImage condition="begin with">C:\ProgramData\Microsoft\Windows
+                        Defender\Platform\</SourceImage>
+                    <SourceImage condition="end with">\MsMpEng.exe</SourceImage>
+                </Rule>
+                <!-- Add your EDR / monitoring agent here, pinned by full path -->
+            </ProcessAccess>
+        </RuleGroup>
+
+        <!-- EID 1: dump tooling and command lines -->
+        <RuleGroup name="LSASS_Dump_Commands" groupRelation="or">
+            <ProcessCreate onmatch="include">
+                <Rule name="LSASS-Cmd-comsvcs-MiniDump" groupRelation="and">
+                    <Image condition="image">rundll32.exe</Image>
+                    <CommandLine condition="contains any">comsvcs;MiniDump;#24</CommandLine>
+                </Rule>
+                <Rule name="LSASS-Cmd-procdump" groupRelation="or">
+                    <Image condition="image">procdump.exe</Image>
+                    <Image condition="image">procdump64.exe</Image>
+                    <OriginalFileName condition="is">procdump</OriginalFileName>
+                </Rule>
+                <Rule name="LSASS-Cmd-Generic" groupRelation="or">
+                    <CommandLine condition="contains all">lsass;-ma</CommandLine>
+                    <CommandLine condition="contains all">lsass;.dmp</CommandLine>
+                    <CommandLine condition="contains any">
+                        sekurlsa;lsadump;Out-Minidump;Invoke-Mimikatz;nanodump;pypykatz</CommandLine>
+                </Rule>
+                <!-- PowerShell resolving the lsass PID, then dumping -->
+                <Rule name="LSASS-PS-Process-Lookup" groupRelation="and">
+                    <Image condition="image">powershell.exe</Image>
+                    <CommandLine condition="contains all">Get-Process;lsass</CommandLine>
+                </Rule>
+            </ProcessCreate>
+        </RuleGroup>
+
+        <!-- EID 11: dump files written to disk -->
+        <RuleGroup name="LSASS_Dump_Files" groupRelation="or">
+            <FileCreate onmatch="include">
+                <Rule name="LSASS-DumpFile-Name" groupRelation="and">
+                    <TargetFilename condition="contains">lsass</TargetFilename>
+                    <TargetFilename condition="end with">.dmp</TargetFilename>
+                </Rule>
+                <Rule name="LSASS-DumpFile-TaskMgr" groupRelation="and">
+                    <Image condition="image">taskmgr.exe</Image>
+                    <TargetFilename condition="end with">.DMP</TargetFilename>
+                </Rule>
+                <Rule name="LSASS-DumpFile-WER" groupRelation="and">
+                    <Image condition="image">WerFault.exe</Image>
+                    <TargetFilename condition="contains">lsass</TargetFilename>
+                </Rule>
+            </FileCreate>
+        </RuleGroup>
+
+        <!-- EID 8: threads injected into lsass -->
+        <RuleGroup name="LSASS_RemoteThread" groupRelation="or">
+            <CreateRemoteThread onmatch="include">
+                <TargetImage name="LSASS-RemoteThread" condition="image">lsass.exe</TargetImage>
+            </CreateRemoteThread>
+        </RuleGroup>
+
+    </EventFiltering>
+</Sysmon>
