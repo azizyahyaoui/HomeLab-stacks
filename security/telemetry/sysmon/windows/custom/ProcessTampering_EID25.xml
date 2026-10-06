@@ -1,0 +1,33 @@
+<Sysmon schemaversion="4.50">
+    <EventFiltering>
+        
+        <!--========================
+        # EVENT ID 25: Process Tampering
+        # Exclude verified legitimate applications by exact path to reduce noise
+        =========================-->
+        <RuleGroup name="ProcessTampering_Exclusions" groupRelation="or">
+            <ProcessTampering onmatch="exclude">
+                
+                <!-- Web Browsers & Updaters -->
+                <Image condition="is">C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe</Image>
+                <Image condition="is">C:\Program Files\Google\Chrome\Application\chrome.exe</Image>
+                <Image condition="end with">\software_reporter_tool.exe</Image>
+                <Image condition="is">C:\Program Files\Mozilla Firefox\firefox.exe</Image>
+                <Image condition="is">C:\Program Files\Mozilla Firefox\updater.exe</Image>
+                <Image condition="is">C:\Program Files\Mozilla Firefox\default-browser-agent.exe</Image>
+                <Image condition="is">C:\Program Files\Mozilla Firefox\pingsender.exe</Image>
+
+                <!-- Development Tools -->
+                <Image condition="is">C:\Program Files\Microsoft VS Code\Code.exe</Image>
+                <Image condition="is">C:\Program Files\Git\cmd\git.exe</Image>
+                <Image condition="is">C:\Program Files\Git\mingw64\bin\git.exe</Image>
+
+                <!-- Electron-based Applications -->
+                <Image condition="is">C:\Program Files\Slack\slack.exe</Image>
+                <Image condition="is">C:\Users\*\AppData\Local\Microsoft\Teams\current\Teams.exe</Image>
+
+            </ProcessTampering>
+        </RuleGroup>
+
+    </EventFiltering>
+</Sysmon>

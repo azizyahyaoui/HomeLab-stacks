@@ -678,9 +678,145 @@ Get-SysmonDNSQuery
 
 ---
 
-### Tracking WMI Permanent Events EID
+### Tracking WMI Permanent Events
 
-## Summary
+#### Overview & Detection Value
 
-PSGumshoe provides PowerShell commands for inspecting Sysmon telemetry without manually parsing Windows Event Log records. Start with configuration changes and process creation, then query other event types as needed:
+Windows Management Instrumentation (WMI) permanent event subscriptions are a classic attacker persistence technique that remains highly valuable for defenders. When an attacker creates a permanent subscription, the trigger, consumer, and binding are stored in the WMI repository (CIM database), which makes the persistence fileless, privileged, and resilient across reboots.
+
+Sysmon records these artifacts through three event types:
+
+* **Event ID 19**: `WmiEventFilter` – the WQL trigger that watches for a condition.
+* **Event ID 20**: `WmiEventConsumer` – the action to execute when the trigger fires.
+* **Event ID 21**: `WmiEventConsumerToFilter` – the binding that links the filter to the consumer.
+
+These are low-volume, high-fidelity events that should be treated as high priority whenever they appear. A complete subscription chain usually consists of all three event IDs occurring in quick succession.
+
+* **Fileless Persistence**: Stored in the WMI repository instead of a file on disk.
+* **SYSTEM-Level Execution**: Permanent subscriptions run as `SYSTEM` by default.
+* **Persistence Across Reboots**: Survives system restarts unless explicitly removed.
+* **High Detection Value**: Legitimate enterprise use exists, but WMI subscriptions are uncommon in most Windows environments.
+* **MITRE ATT&CK Mapping**: `T1546.003` (Event Triggered Execution: WMI Event Subscription) and `T1047` (Windows Management Instrumentation).
+
+#### Components of a WMI Permanent Event
+
+A permanent WMI event subscription has three core components:
+
+* **Event Filter (Event ID 19)**: Defines the WQL query that triggers the subscription. Typical conditions include startup, user logon, file changes, or process creation.
+* **Event Consumer (Event ID 20)**: Defines the action to take when the trigger occurs. In attacker activity this is commonly a command line, encoded PowerShell, or a script execution engine such as `wscript.exe` or `cscript.exe`.
+* **Event Binder (Event ID 21)**: Registers the filter and consumer together so the consumer executes when the condition is met.
+
+#### What to Investigate
+
+When reviewing WMI event logs, treat every occurrence as suspicious unless it is tied to a verified enterprise management tool.
+
+* **Look for the Full Chain**: Event IDs 19, 20, and 21 often appear close together in time. A complete attack chain will contain all three.
+* **Review the Consumer Destination**: The `Destination` field in Event ID 20 is usually the most important artifact. Look for:
+  - Encoded or obfuscated PowerShell commands.
+  - `cmd.exe` or `powershell.exe` with suspicious arguments.
+  - `cscript.exe` or `wscript.exe` launching scripts from temp or remote locations.
+  - Download-and-execute behaviors or execution of credentials tools.
+* **Inspect the Filter Query**: Event ID 19 shows the WQL condition. Adversary examples include triggers on system startup, user logon, or selected process creation. Time-based or periodic triggers are also common.
+* **Check the User Context**: WMI subscriptions normally require elevated permissions. Investigate subscriptions created by non-admin accounts, service accounts, or recently compromised identities.
+* **Correlate With Related Activity**: A WMI subscription created shortly after suspicious PowerShell, script execution, or privilege escalation is highly relevant.
+
+#### Event Field Breakdown
+
+The following fields are typically present and useful for triage:
+
+| Field Name | Description |
+| --- | --- |
+| `RuleName` | The Sysmon rule that matched the event, if configured. |
+| `EventType` | The event category, such as `WmiFilterEvent`, `WmiConsumerEvent`, or `WmiBindingEvent`. |
+| `UtcTime` | The UTC timestamp when the subscription object was created, modified, or removed. |
+| `Operation` | Whether the object was created, changed, or deleted. |
+| `User` | The user account that created or modified the WMI object. |
+| `EventNamespace` | The WMI namespace in which the object was created. |
+| `Name` | The name assigned to the filter or consumer. |
+| `Query` | The WQL query associated with the filter. |
+| `Type` | The type of consumer object, such as `CommandLineEventConsumer` or `ActiveScriptEventConsumer`. |
+| `Destination` | The command or script that will execute when the event is triggered. |
+| `Consumer` | The path to the consumer object in the WMI repository. |
+| `Filter` | The path to the filter object in the WMI repository. |
+
+#### Detection Gaps and Complementary Logging
+
+Sysmon captures WMI event subscriptions created under the standard `Root\Subscription` namespace, but it does not log objects created in the `Root` namespace. Attackers aware of this limitation may bypass Sysmon by placing their subscriptions in `Root` instead. Because of this, native Windows WMI activity logging is essential for complete coverage.
+
+* **Sysmon Gap**: Excludes `Root` namespace items.
+* **Recommended Complementary Log**: Microsoft-Windows-WMI-Activity/Operational, especially **Event ID 5861**.
+* **Operational Visibility**: Event ID 5861 includes query and consumer information and can expose subscriptions that Sysmon misses.
+
+#### Production XML Configuration
+
+Given the low volume and high value of WMI event data, the recommended approach is usually to log everything and filter in the SIEM instead of excluding broadly. This schema 4.91 example enables WMI logging for all event subscriptions and is suitable for most environments where enterprise tooling has been reviewed.
+
+```xml
+<Sysmon schemaversion="4.22">
+   <HashAlgorithms>*</HashAlgorithms>
+   <CheckRevocation/>
+   <EventFiltering>
+      <RuleGroup name="" groupRelation="or">
+         <WmiEvent onmatch="exclude">
+            <!-- Log all WMI events by default; volume is typically very low -->
+            <!-- Exclude only known-good management subscriptions after validation -->
+         </WmiEvent>
+      </RuleGroup>
+   </EventFiltering>
+</Sysmon>
+```
+
+If exclusions are necessary, prefer filtering on a validated consumer name or operation rather than broad suppression. For example:
+
+```xml
+<WmiEvent onmatch="exclude">
+   <Operation condition="is">Created</Operation>
+   <Consumer condition="contains">SCNotification</Consumer>
+</WmiEvent>
+```
+
+#### Practical Guidance
+
+The most important analyst behavior is simple: investigate every WMI permanent event that appears outside of approved enterprise management tools. In most environments, a single WMI subscription is unusual enough to warrant immediate review, especially when the consumer points to PowerShell, script execution, or remote payloads.
+
+
+```powershell
+
+Get-SysmonWmiFilter
+Get-WinEvent -LogName 'Microsoft-Windows-WMI-Activity/Operational' -MaxEvents 50
+
+```
+
+---
+
+###  Detecting Process Tampering
+
+Sysmon **Event ID 25 (ProcessTampering)** records detected changes to a process image. It can help identify process hollowing and process herpaderping, but it is not a complete detector for process injection. Hollowing detection can vary by implementation and sample; herpaderping may also be detected when a file is altered after its image has been mapped. Validate observed behavior in your environment rather than treating the event as guaranteed coverage.
+
+#### What to investigate
+
+Process hollowing commonly involves creating a legitimate process in a suspended state, replacing or modifying its in-memory image, and then resuming it. Herpaderping creates a mismatch between the image mapped for execution and the file later seen on disk. In either case, correlate Event ID 25 with process creation (Event ID 1), process access (Event ID 10), image loads (Event ID 7), and network connections (Event ID 3), when available.
+
+Review the event's **Type**, **Image**, **ProcessGuid**, and **ProcessId** fields. Treat an image-replacement event as a high-priority lead; an image-lock event can have legitimate causes and needs context. Examine the parent process, command line, signer, file path, and related activity. Unexpected tampering of critical processes or on production servers merits prompt triage.
+
+#### Configuration and tuning
+
+Enable ProcessTampering collection and initially record events without exclusions. Baseline activity, verify the cause of recurring benign events, and then add only narrowly scoped exclusions. Prefer exact paths and revalidate them after application updates; broad exclusions can hide malicious activity using a familiar process name.
+
+```xml
+<ProcessTampering onmatch="exclude">
+  <!-- Example only: exclude a verified application by exact path. -->
+  <Image condition="is">C:\Program Files\Example\app.exe</Image>
+</ProcessTampering>
+```
+
+Place this rule within the `<EventFiltering>` section of the Sysmon configuration. Event ID 25 should complement, not replace, other process and endpoint telemetry.
+
+---
+
+
+### Tracking Registry Actions
+
+
+---
 
