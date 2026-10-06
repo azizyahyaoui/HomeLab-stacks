@@ -1,0 +1,61 @@
+<Sysmon schemaversion="4.91">
+    <HashAlgorithms>sha256</HashAlgorithms>
+    <CheckRevocation/>
+    
+    <!-- MANDATORY: Enables Sysmon Clipboard Capture (Event ID 24) -->
+    <CaptureClipboard/>
+    
+    <!-- Directory where archived clipboard text files are saved under SYSTEM ACLs -->
+    <ArchiveDirectory>SecureClipboardArchive</ArchiveDirectory>
+    
+    <EventFiltering>
+        
+        <!--========================
+        # EVENT ID 24: Clipboard Change (Inclusions)
+        # Target high-risk processes, shells, and remote desktop services
+        =========================-->
+        <RuleGroup name="ClipboardMonitoring_Inclusions" groupRelation="or">
+            <ClipboardChange onmatch="include">
+                
+                <!-- RDP Clipboard Redirection Process -->
+                <Image condition="end with">rdpclip.exe</Image>
+                
+                <!-- Command Shells & Scripting Engines -->
+                <Image condition="end with">powershell.exe</Image>
+                <Image condition="end with">pwsh.exe</Image>
+                <Image condition="end with">cmd.exe</Image>
+                <Image condition="end with">wscript.exe</Image>
+                <Image condition="end with">cscript.exe</Image>
+                
+                <!-- Execution from Temporary Directories -->
+                <Rule groupRelation="or">
+                    <Image condition="contains">\Temp\</Image>
+                    <Image condition="contains">\AppData\Local\Temp\</Image>
+                </Rule>
+                
+            </ClipboardChange>
+        </RuleGroup>
+
+        <!--========================
+        # EVENT ID 24: Clipboard Change (Exclusions)
+        # Ignore noisy, legitimate applications to reduce performance impact & privacy exposure
+        =========================-->
+        <RuleGroup name="ClipboardMonitoring_Exclusions" groupRelation="or">
+            <ClipboardChange onmatch="exclude">
+                
+                <!-- Office & IDE Applications -->
+                <Image condition="is">C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE</Image>
+                <Image condition="is">C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE</Image>
+                <Image condition="contains">\Microsoft VS Code\</Image>
+                
+                <!-- Standard Web Browsers -->
+                <Image condition="contains">\Google\Chrome\Application\chrome.exe</Image>
+                <Image condition="contains">\Mozilla Firefox\firefox.exe</Image>
+                <Image condition="is">C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe</Image>
+                <Image condition="end with">\Microsoft\Edge\Application\msedge.exe</Image>
+                
+            </ClipboardChange>
+        </RuleGroup>
+
+    </EventFiltering>
+</Sysmon>
