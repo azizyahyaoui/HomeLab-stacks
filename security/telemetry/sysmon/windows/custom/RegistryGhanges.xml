@@ -1,0 +1,32 @@
+<Sysmon schemaversion="4.50">
+  <EventFiltering>
+    <!--========================
+    # EVENT IDs 12, 13, 14: Registry Events
+    # USE STRICT INCLUDES ONLY - Extreme Volume Risk
+    =========================-->
+    <RuleGroup name="Registry_Targeted_Includes" groupRelation="or">
+      <RegistryEvent onmatch="include">
+        
+        <!-- Persistence: Auto-run & Startup -->
+        <TargetObject name="T1060_RunKeys" condition="contains">\CurrentVersion\Run</TargetObject>
+        <TargetObject name="T1060_Startup" condition="contains">Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders\Startup</TargetObject>
+        <TargetObject name="T1543_Services" condition="end with">\ImagePath</TargetObject>
+        <TargetObject name="T1543_Services" condition="end with">\ServiceDll</TargetObject>
+        <TargetObject name="T1004_Winlogon" condition="begin with">HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\</TargetObject>
+
+        <!-- Defense Evasion: Security Tool Tampering -->
+        <TargetObject name="T1562_DefenderTampering" condition="contains">\Microsoft\Windows Defender\DisableAntiSpyware</TargetObject>
+        <TargetObject name="T1562_DefenderTampering" condition="contains">\Microsoft\Windows Defender\Exclusions\</TargetObject>
+        <TargetObject name="T1548_UACDisable" condition="contains">\Policies\System\EnableLUA</TargetObject>
+
+        <!-- Credential Access: WDigest Downgrade -->
+        <TargetObject name="T1003_WDigest" condition="end with">\WDigest\UseLogonCredential</TargetObject>
+
+        <!-- Accessibility Hijacking: Sticky Keys -->
+        <TargetObject name="T1546_StickyKeys" condition="contains">\Image File Execution Options\sethc.exe</TargetObject>
+        <TargetObject name="T1546_UtilMan" condition="contains">\Image File Execution Options\utilman.exe</TargetObject>
+
+      </RegistryEvent>
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>
