@@ -513,6 +513,8 @@ When one of those processes tries to write a PE file such as `.exe`, `.dll`, or 
 
 This is a behavioral control, not an AV signature check. It blocks any executable created by those processes, not just malicious files. That means it can also block legitimate admin activity such as `Invoke-WebRequest -OutFile` or packaged installer workflows, so it should be tested before broad deployment. It does not block script files (`.ps1`, `.vbs`, `.js`) or non-PE content; the detection is based on the PE header, not the extension.
 
+**MZ header note:** Windows PE files typically begin with the DOS `MZ` signature (`4D 5A`) and contain a DOS stub before the PE header. The signature alone does not prove a file is a valid PE executable, and `.mz` is not the header itself; executable detection is based on file content rather than its filename extension.
+
 For safer rollout, use audit mode first. Sysmon 15+ adds Event ID 29 (`FileExecutableDetected`), which logs executable creation without blocking. Review the hits for a week, then add exclusions for known-good paths or file names before enabling active blocking.
 
 ```xml
@@ -545,8 +547,45 @@ Get-SysmonFileBlockExecutable
 ```
 ---
 
+### Tracking File Deletion and Blocking Shredding
+
+The attached `FileDeleteDetected.xml` combines deletion auditing, optional file archiving, and shredding prevention. These are separate controls with different storage and operational impacts.
+
+#### File deletion tracking
+
+**Tier 1: File archiving (Event ID 23, `FileDelete`)**
+
+The `FileDelete` rules select files in specified staging and system locations for archiving when deleted. The paths include Outlook's `INetCache\Content.Outlook`, user `Downloads` and `AppData\Local\Temp`, selected `ProgramData` directories, and selected Windows directories. The extension filters cover executable and script formats, Office-related files, installers, archives, and shortcuts; the exact extensions vary by path rule. These are configured paths, not a guarantee that every listed directory is world-writable.
+
+Archiving can aid investigation, but it consumes disk space and may retain sensitive files. Monitor archive growth and access, and scope the rules to your retention and privacy requirements.
+
+**Tier 2: Audit without archiving (Event ID 26, `FileDeleteDetected`)**
+
+The `FileDeleteDetected` rules log deletions from `Downloads` and `AppData\Local\Temp` for `.exe`, `.dll`, `.msi`, `.7z`, and `.zip` files without saving a copy. This is a lower-storage way to establish a deletion baseline, but it does not provide file recovery.
+
+`<ArchiveDirectory>Archive</ArchiveDirectory>` specifies `Archive` as the archive directory name for Event ID 23. The actual location depends on the Sysmon installation and configuration; verify it on the deployed host and ensure it has adequate capacity and appropriate access controls.
+
+#### File shredding prevention (Event ID 28, `FileBlockShredding`)
+
+`FileBlockShredding` is configured in two rule groups:
+
+* The `onmatch="exclude"` group exempts selected processes and users, including Windows services, Defender, and listed user applications. Exclusions reduce false positives but also create blind spots; validate the image paths and identities in your environment.
+* The `onmatch="include"` group targets selected extensions, including executables, scripts, web-related files, Office macro formats, ticket artifacts, and delivery containers. Sysmon blocks matching shredding activity; this is not a general-purpose backup or protection against ordinary deletion.
+
+The attached XML already wraps both `FileBlockShredding` rules in `RuleGroup` elements and declares schema version `4.91`. Its `FileDeleteDetected` extension list uses `.dll` (with the dot), so the alleged `dll` typo does not apply to this file. Confirm that the installed Sysmon version supports the configured events and schema before deployment.
+
+Test the configuration on a pilot group, review event volume and exclusions, and consider tabletop exercises to adapt it to your environment. Avoid archiving sensitive data unintentionally and document a rollback plan.
+
+```powershell
+Get-SysmonFileDeleteDetectedEvent
+```
+
+```powershell
+Get-SysmonFileBlockShredding
+```
+
+
 ## Summary
 
 PSGumshoe provides PowerShell commands for inspecting Sysmon telemetry without manually parsing Windows Event Log records. Start with configuration changes and process creation, then query other event types as needed:
-
 
