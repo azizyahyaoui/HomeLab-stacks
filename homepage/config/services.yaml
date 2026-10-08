@@ -8,6 +8,10 @@
         href: "{{HOMEPAGE_VAR_GITHUB_URL}}"
         description: Code Repository
 
+    - Gitlab:
+            icon: gitlab.svg
+            href: "{{HOMEPAGE_VAR_GITLAB_URL}}"
+            description: Code Repository
     - Slack:
         icon: slack.svg
         href: "{{HOMEPAGE_VAR_SLACK_URL}}"

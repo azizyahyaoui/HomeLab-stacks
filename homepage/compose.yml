@@ -41,6 +41,8 @@ services:
       HOMEPAGE_VAR_SLACK_URL: ${HOMEPAGE_VAR_SLACK_URL}
       #--- GitHub Variables ---
       HOMEPAGE_VAR_GITHUB_URL: ${HOMEPAGE_VAR_GITHUB_URL}
+      #--- Gitlab Variables ---
+      HOMEPAGE_VAR_GITLAB_URL: ${HOMEPAGE_VAR_GITLAB_URL}
 
     volumes:
       - ./config:/app/config
