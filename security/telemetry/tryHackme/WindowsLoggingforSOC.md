@@ -198,13 +198,69 @@ Many real breaches involved at least some user manipulation events, for example,
 ---
 ---
 
-## Task 5:
+## Task 5: Sysmon: Process Monitoring
+
+**Overview**
+
+- Sarah, have you run any files from the Internet recently?
+- Of course not, why? I never open any untrusted files
+- Well, your IP is trying to brute-force our production servers
+
+Above is an example of why SOC teams need more detailed logging than just authentication attempts. Even if you know who is breached, you often don't know how. That's where process monitoring comes in handy, and there are two ways to enable it on Windows:
+
+| Event Code | Purpose | Limitations |
+| --- | --- | --- |
+| 4688 (Security Log: Process Creation) | Log an event every time a new process is launched, including its command line and parent process details | Disabled by default, you need to enable it by following the [official documentation](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/component-updates/command-line-process-auditing) |
+| 1 (Sysmon: Process Creation) | Replace 4688 event code and provide more advanced fields like process hash and its signature | Sysmon is an external tool not installed by default. Check out the Sysmon official page |
+
+Sysmon vs Security Log
+Sysmon is a free tool from the Microsoft Sysinternals suite that became a de facto standard for advanced monitoring in addition to the default system logs. For this task, we'll jump right into analyzing Sysmon logs but you can learn more about this great tool in another TryHackMe room.
+
+So, if I were to choose between enabling the basic, noisy 4688 event ID or spending some time installing Sysmon to receive more powerful and flexible logs, I would proceed with Sysmon, and you are encouraged to do the same! Once installed, Sysmon logs are found in Event Viewer under Applications & Services -> Microsoft -> Windows -> Sysmon -> Operational.
+
+![Sysmon vs Security Log](Screenshots/SysmonvsSecurityLog.png)
+
+Comparison screenshot demonstrating the differences between 4688 and Sysmon 1 event IDs
+
+Sysmon Event ID 1 in Action
+As you can see on the screenshot above, event ID 1 has a lot of different fields, the most important of which can be grouped as:
+
+Process Info: Context of the launched process, including its PID, path (image), and command line
+Parent Info: Context of the parent process, very useful to build a process tree or an attack chain
+Binary Info: Process hash, signature, and PE metadata. You will need it for more advanced rooms
+User Context: A user running the process and, most importantly, Logon ID - same as in the Security logs
+Since almost any attack works on the endpoint level and requires at least some process to be launched to breach the system or exfiltrate the data from it, process monitoring is the most important log source for any SOC team. Use the following workbook to perform a basic analysis of any process launch:
+
+Analyse Process Launch (Expand Me)
+Open Sysmon logs and filter for event ID 1
+Review the fields from the process and binary info groups. The red flags are:
+Image is in an uncommon directory like C:\Temp or C:\Users\Public
+Process is suspiciously named like aa.exe or jqyvpqldou.exe
+Process hash (MD5 or SHA256) matches as malware on VirusTotal
+Review the fields from the parent process group. The red flags are:
+Parent matches red flags from step 2 (suspicious name, path, or hash)
+Parent is not expected (e.g. Notepad launching some CMD commands)
+If still in doubt, go up the process tree until you are confident in your verdict:
+Find the preceding event where ProcessId equals ParentProcessId in your event
+Analyze it by following steps 2 and 3 (suspicious parent, name, path, or hash)
+Finally, trace the attack chain by filtering all Security and Sysmon events with the same Logon ID
+Answer the questions below
+Open the "Practice-Sysmon.evtx" file on the VM's Desktop.
+Which web browser does Sarah use to browse the web?
+
+
+Which file did Sarah download from the browser?
+
+
+Which URL was the file downloaded from?
+Note: Use other Sysmon events to find out!
+
 
 
 ---
 ---
 
-## Task 6:
+## Task 6: Sysmon: Files and Network
 
 
 
@@ -218,7 +274,7 @@ Many real breaches involved at least some user manipulation events, for example,
 ---
 ---
 
-## Task 7:
+## Task 7: PowerShell: Logging Commands
 
 
 
@@ -232,7 +288,7 @@ Many real breaches involved at least some user manipulation events, for example,
 ---
 ---
 
-## Task 8:
+## Task 8: Conclusion
 
 
 

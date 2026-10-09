@@ -28,8 +28,8 @@ kept independent so services can be deployed, updated, and backed up separately.
 ## Current services
 
 - [Homepage](homepage/) — dashboard for homelab services and integrations.
-- [ELK stack](monitoring/elk-stack/) — Elasticsearch, Logstash, and Kibana for log collection and analysis.
-- [Prometheus](monitoring/promethus/) — metrics monitoring workspace.
+- [ELK stack](Logging/elk-stack/) — Elasticsearch, Logstash, and Kibana for log collection and analysis.
+- [Prometheus](monitoring/prometheus/) — metrics monitoring workspace.
 - [Nessus](security/nessus/) — vulnerability scanning workspace.
 - [OpenVAS](security/openvas/) — vulnerability scanning workspace.
 
