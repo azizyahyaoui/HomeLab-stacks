@@ -475,11 +475,11 @@ This is telemetry validation, not detection by itself.
 
 ## 6. Sysmon for Linux
 
-Sysmon also has a Linux implementation maintained by Microsoft.
+Sysmon also has a Microsoft-maintained Linux implementation. Built on *eBPF*, it follows the same XML-based configuration model and many of the same event IDs as the Windows version, but supports a smaller set of event types. Unlike Windows, Linux Sysmon emits events to **syslog** rather than to an Event Log channel.
 
 The Linux implementation is **not simply Windows Sysmon copied onto Linux**. Keep the platform-specific behavior and event model separate.
 
-Refer to the [Sysmon for Linux project](https://github.com/microsoft/SysmonForLinux) for:
+Refer to the [Sysmon for Linux project](https://github.com/microsoft/Sysmon-Linux) for:
 
 - Supported distributions
 - Installation
@@ -500,6 +500,21 @@ For this homelab, Linux configurations belong under:
 Record the tested Linux distribution, kernel, Sysmon version, configuration revision, and log destination with each experiment.
 
 > **Important:** Do not reuse Windows Event ID assumptions for Linux. Treat Windows and Linux telemetry as separate platform implementations.
+
+### Installation
+
+[Install Sysmon](https://github.com/microsoft/Sysmon-Linux/blob/main/INSTALL.md)
+
+```bash
+wget -q https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+sudo dpkg -i packages-microsoft-prod.deb
+sudo apt-get update
+sudo apt-get install sysmonforlinux
+```
+
+> [!Note]
+> Other supported distros are Debian, RHEL, Fedora, Azure Linux 3, openSUSE 15 and SLES 15. Each has its own repo-setup line in that file.
+
 
 ---
 

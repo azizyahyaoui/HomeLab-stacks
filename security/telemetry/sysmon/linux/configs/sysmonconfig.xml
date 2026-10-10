@@ -1,0 +1,51 @@
+<Sysmon schemaversion="4.90">
+  <EventFiltering>
+
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="include">
+        <Rule name="Linux-AccountMgmt" groupRelation="or">
+          <Image condition="end with">/useradd</Image>
+          <Image condition="end with">/usermod</Image>
+          <Image condition="end with">/userdel</Image>
+          <Image condition="end with">/passwd</Image>
+          <Image condition="end with">/chpasswd</Image>
+        </Rule>
+        <Rule name="Linux-Recon" groupRelation="or">
+          <Image condition="end with">/whoami</Image>
+          <Image condition="end with">/ifconfig</Image>
+          <Image condition="end with">/netstat</Image>
+          <Image condition="end with">/ss</Image>
+        </Rule>
+        <Rule name="Linux-Download-or-Shell-Tools" groupRelation="or">
+          <Image condition="end with">/curl</Image>
+          <Image condition="end with">/wget</Image>
+          <Image condition="end with">/nc</Image>
+          <Image condition="end with">/ncat</Image>
+          <Image condition="end with">/socat</Image>
+        </Rule>
+      </ProcessCreate>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <FileCreate onmatch="include">
+        <Rule name="Linux-DropLocations" groupRelation="or">
+          <TargetFilename condition="begin with">/tmp/</TargetFilename>
+          <TargetFilename condition="begin with">/dev/shm/</TargetFilename>
+          <TargetFilename condition="begin with">/var/tmp/</TargetFilename>
+          <TargetFilename condition="begin with">/etc/cron</TargetFilename>
+        </Rule>
+      </FileCreate>
+    </RuleGroup>
+
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="include">
+        <Rule name="Linux-Shell-Network" groupRelation="or">
+          <Image condition="end with">/bash</Image>
+          <Image condition="end with">/sh</Image>
+          <Image condition="end with">/nc</Image>
+        </Rule>
+      </NetworkConnect>
+    </RuleGroup>
+
+  </EventFiltering>
+</Sysmon>
