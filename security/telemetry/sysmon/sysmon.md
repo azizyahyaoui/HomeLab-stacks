@@ -515,6 +515,58 @@ sudo apt-get install sysmonforlinux
 > [!Note]
 > Other supported distros are Debian, RHEL, Fedora, Azure Linux 3, openSUSE 15 and SLES 15. Each has its own repo-setup line in that file.
 
+### Run Sysmon for Linux
+
+Use the installed `sysmon` command and consult its output for the exact options supported by your package version:
+
+```bash
+sudo sysmon -accepteula -i config.xml
+sudo sysmon -c config.xml
+sudo sysmon -s
+sudo sysmon -u
+```
+
+Set the configuration's `schemaversion` to a version reported by `sudo sysmon -s`; do not copy a version number from an unrelated host or example. Check the project documentation for the exact configuration elements supported by your release.
+
+### View events
+
+On Ubuntu systems that write Syslog messages to `/var/log/syslog`, the package's viewer can render the XML event payloads:
+
+```bash
+sudo tail -f /var/log/syslog | sudo /opt/sysmon/sysmonLogView
+```
+
+The log path varies by distribution and logging configuration. RHEL-family systems commonly use `/var/log/messages`. Confirm the destination on the host before troubleshooting collection. Large events may be truncated by the logging pipeline; if needed, use the supported `<FieldSizes>` setting under `<Sysmon>` to cap verbose fields, for example `<FieldSizes>CommandLine:100,Image:20</FieldSizes>`. Validate the setting against the installed schema.
+
+### Starter configuration approach
+
+Start from a Linux-specific sample in the [Sysmon for Linux project](https://github.com/microsoft/SysmonForLinux), then:
+
+1. Set `schemaversion` to a version reported by `sudo sysmon -s`.
+2. Enable only event filters supported by that schema. A modest lab baseline can investigate process creation, network connections, and file activity where supported.
+3. Test the configuration on a disposable host, inspect the resulting events, and record its revision with the distribution, kernel, Sysmon version, and log destination.
+4. Tune volume deliberately. Broad process and file collection can be noisy; activity in `/tmp` and tools such as `curl` may produce many events. Add narrowly scoped filters only after reviewing what they exclude.
+
+Linux account utilities such as `useradd`, `usermod`, `passwd`, and `userdel` may appear as process activity when the relevant process event is enabled. They are **not** Linux equivalents of Windows Security event IDs 4720, 4732, 4724, or 4726; Sysmon for Linux does not turn them into those Windows events. Use Linux audit/authentication sources to monitor account changes.
+
+### Differences from Windows
+
+- The Linux implementation supports a smaller, version-dependent event set. Process creation, network connections, process termination, raw-access reads, file creation, configuration changes, and file deletion are among the event types documented across releases; availability and names can vary. `sudo sysmon -s` and the project documentation for your build are authoritative.
+- Do not assume Windows event IDs or feature coverage. Linux Sysmon does not provide Windows registry, named-pipe, alternate-data-stream, or LSASS-style process-access telemetry.
+- There is no Windows Security log equivalent. For logins, `sudo` activity, and account changes, use `auditd` or the distribution's authentication logs alongside Sysmon.
+
+### Wazuh collection
+
+If the Wazuh agent reads the host's syslog file, configure the actual log path in `ossec.conf`. For a host using `/var/log/syslog`, the local-file entry is:
+
+```xml
+<localfile>
+  <log_format>syslog</log_format>
+  <location>/var/log/syslog</location>
+</localfile>
+```
+
+Sysmon event XML is carried inside syslog messages. Confirm that your Wazuh version has suitable decoders and rules for Sysmon for Linux, and test parsing and alert behavior before relying on it; plain syslog collection alone does not guarantee Sysmon-specific field extraction.
 
 ---
 
