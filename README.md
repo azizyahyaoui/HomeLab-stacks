@@ -1,7 +1,7 @@
 # Homelab Stack
 
-   Creator: Yahyaoui Med Aziz | 260727
-   Editor: Antigravity  
+Creator: Yahyaoui Med Aziz | 260727
+Editor: Antigravity
 
 [![HOMELAB](https://img.shields.io/badge/HOMELAB-STACK-0b84c6?style=flat-square)](.)
 [![DOCKER](https://img.shields.io/badge/DOCKER-CONTAINERS-2496ed?style=flat-square&logo=docker&logoColor=white)](.)
@@ -10,28 +10,41 @@
 [![VULNERABILITY SCANNING](https://img.shields.io/badge/VULNERABILITY%20SCANNING-IN%20PROGRESS-f08c46?style=flat-square)](security/)
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE%20ATT%26CK-MAPPED-4caf00?style=flat-square)](security/)
 
-Infrastructure and services for a self-hosted homelab. Each top-level directory is
-kept independent so services can be deployed, updated, and backed up separately.
+This repository contains a modular self-hosted homelab environment for running dashboards, observability, security tools, and supporting infrastructure as independent stacks. Each top-level directory is designed to be deployed, updated, and backed up separately so the whole lab remains manageable without coupling everything to a single compose file.
+
+## Overview
+
+The stack is structured around practical homelab needs:
+
+- A central dashboard for service access and navigation
+- Log collection and analysis for troubleshooting and auditing
+- Monitoring and alerting for infrastructure health
+- Vulnerability scanning and telemetry collection
+- Infrastructure automation for VMs and lab provisioning
 
 ## Repository layout
 
 | Directory | Purpose | Status |
 | --- | --- | --- |
-| [`apps/`](apps/) | Application stacks | Planned |
-| [`containers/`](containers/) | General-purpose container definitions | Planned |
-| [`databases/`](databases/) | Database services and persistent data definitions | Planned |
-| [`homepage/`](homepage/) | Homepage dashboard and service links | Active |
-| [`monitoring/`](monitoring/) | Metrics, logs, and observability | In progress |
-| [`reverse-proxy/`](reverse-proxy/) | Ingress and TLS configuration | Planned |
-| [`security/`](security/) | Vulnerability scanning and security tooling | In progress |
+| [`Logging/`](Logging/) | Centralized logging and ELK-based log pipelines | Active |
+| [`Vms/`](Vms/) | VM templates, infrastructure as code, and provisioning assets | Planned |
+| [`apps/`](apps/) | Application stacks and services | Planned |
+| [`containers/`](containers/) | General-purpose container definitions and shared images | Planned |
+| [`databases/`](databases/) | Database services and persistent storage definitions | Planned |
+| [`homepage/`](homepage/) | Dashboard and service landing page | Active |
+| [`monitoring/`](monitoring/) | Metrics, alerts, dashboards, and observability tooling | In progress |
+| [`reverse-proxy/`](reverse-proxy/) | Ingress, TLS, and routing configuration | Planned |
+| [`security/`](security/) | Vulnerability scanners, telemetry, and security operations | In progress |
 
-## Current services
+## Active services
 
-- [Homepage](homepage/) — dashboard for homelab services and integrations.
+- [Homepage](homepage/) — service landing page with quick links and integrations.
 - [ELK stack](Logging/elk-stack/) — Elasticsearch, Logstash, and Kibana for log collection and analysis.
-- [Prometheus](monitoring/prometheus/) — metrics monitoring workspace.
+- [Prometheus](monitoring/prometheus/) — metrics collection and service monitoring.
+- [Grafana](monitoring/grafana/) — dashboards and visual observability.
 - [Nessus](security/nessus/) — vulnerability scanning workspace.
-- [OpenVAS](security/openvas/) — vulnerability scanning workspace.
+- [OpenVAS](security/openvas/) — vulnerability assessment environment.
+- [Telemetry](security/telemetry/) — security event and system telemetry collection assets.
 
 ## Getting started
 
@@ -39,12 +52,12 @@ kept independent so services can be deployed, updated, and backed up separately.
 
 - Docker Engine
 - Docker Compose v2 (`docker compose`)
-- A Linux host with enough storage for persistent service data
+- A Linux host with sufficient CPU, memory, and storage for persistent services
+- Optional: virtualization tools for VM workloads in [`Vms/`](Vms/)
 
-### Start a service
+### Starting a service
 
-Move into the service directory and follow its local README. For a Compose-based
-service, the usual workflow is:
+Move into the service directory and follow its local README. A typical workflow for Compose-based services is:
 
 ```bash
 cd path/to/service
@@ -53,38 +66,40 @@ docker compose ps
 docker compose logs -f
 ```
 
-Stop a service with:
+To stop a stack:
 
 ```bash
 docker compose down
 ```
 
-Do not run Compose from the repository root unless a root-level compose file is
-added in the future.
+Do not run Compose from the repository root unless a dedicated root-level stack is added in the future.
 
 ## Configuration and secrets
 
-- Keep service-specific configuration beside the service that uses it.
+- Keep service-specific configuration near the service that uses it.
 - Commit sanitized `.env.sample` files, never populated `.env` files.
 - Do not commit passwords, API keys, certificates, private keys, or generated data.
 - Back up persistent volumes and document restore steps in the relevant service README.
+- Prefer explicit environment variables and versioned configuration files over hidden defaults.
+
+## Contributing
+
+When adding a new service:
+
+1. Create a dedicated directory under the most relevant top-level category.
+2. Add a README with purpose, prerequisites, ports, volumes, configuration, and recovery steps.
+3. Include a sanitized `.env.sample` if environment variables are required.
+4. Document the service and its deployment flow in this README.
+5. Keep the stack isolated and avoid coupling unrelated components together.
 
 ## License
 
 This repository is released under the [MIT License](LICENSE).
 
-## Contributing
-
-When adding a service:
-
-1. Create a dedicated directory under the most relevant top-level category.
-2. Add a README with purpose, prerequisites, ports, volumes, configuration, and recovery steps.
-3. Include a sanitized `.env.sample` when environment variables are required.
-4. Record the service and its deployment instructions in this README.
-
 ## Roadmap
-- TODO:
-  - Define shared network and storage conventions.
-  - Add reverse-proxy and TLS documentation.
-  - Document backup and restore procedures.
-  - Add health checks and monitoring targets for deployed services.
+
+- Define shared networking and storage conventions across services
+- Add reverse-proxy and TLS documentation
+- Document backup and restore procedures for persistent stacks
+- Add health checks and monitoring targets for deployed services
+- Expand the lab with additional app, database, and automation components

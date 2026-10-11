@@ -506,7 +506,12 @@ Record the tested Linux distribution, kernel, Sysmon version, configuration revi
 [Install Sysmon](https://github.com/microsoft/Sysmon-Linux/blob/main/INSTALL.md)
 
 ```bash
-wget -q https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+# Debian
+wget -q https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-$(lsb_release -rs)-prod.deb
+
+# OR Ubuntu
+wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+
 sudo dpkg -i packages-microsoft-prod.deb
 sudo apt-get update
 sudo apt-get install sysmonforlinux
