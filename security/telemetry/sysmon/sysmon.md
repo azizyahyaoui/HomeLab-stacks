@@ -518,7 +518,7 @@ sudo apt-get install sysmonforlinux
 ```
 
 > [!Note]
-> Other supported distros are Debian, RHEL, Fedora, Azure Linux 3, openSUSE 15 and SLES 15. Each has its own repo-setup line in that file.
+> Other supported distros are Debian, RHEL, Fedora, Azure Linux 3, openSUSE 15, and SLES 15. Each has its own repo-setup line in that file. Because some CTFs are limited and do not fully support eBPF, Sysmon cannot run on them.
 
 ### Run Sysmon for Linux
 
