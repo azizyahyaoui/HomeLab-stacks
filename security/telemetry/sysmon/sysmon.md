@@ -560,11 +560,13 @@ Linux account utilities such as `useradd`, `usermod`, `passwd`, and `userdel` ma
 - Do not assume Windows event IDs or feature coverage. Linux Sysmon does not provide Windows registry, named-pipe, alternate-data-stream, or LSASS-style process-access telemetry.
 - There is no Windows Security log equivalent. For logins, `sudo` activity, and account changes, use `auditd` or the distribution's authentication logs alongside Sysmon.
 
-### Wazuh collection
+### Integration with Wazuh
 
 If the Wazuh agent reads the host's syslog file, configure the actual log path in `ossec.conf`. For a host using `/var/log/syslog`, the local-file entry is:
 
 ```xml
+
+<!-- Sysmon for Linux -->
 <localfile>
   <log_format>syslog</log_format>
   <location>/var/log/syslog</location>
@@ -572,6 +574,9 @@ If the Wazuh agent reads the host's syslog file, configure the actual log path i
 ```
 
 Sysmon event XML is carried inside syslog messages. Confirm that your Wazuh version has suitable decoders and rules for Sysmon for Linux, and test parsing and alert behavior before relying on it; plain syslog collection alone does not guarantee Sysmon-specific field extraction.
+
+> [!NOTE]
+> For a practical Sysmon for Linux + Wazuh example, see the integration notes in the Wazuh training repo: [Sysmon for Linux – Wazuh integration](https://github.com/azizyahyaoui/Wazuh-SIEM/blob/master/course/WazuhSIEM.md#sysmon-for-linux-wazuh-integration). It complements this guidance by showing how the Sysmon XML is carried in syslog and how to validate Wazuh decoding and alerting.
 
 ---
 
